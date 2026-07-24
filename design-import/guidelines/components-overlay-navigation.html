@@ -1,0 +1,27 @@
+<!-- @dsCard group="Components" viewport="700x320" name="Overlay & Navigation" subtitle="Dialog, Tabs, Navbar, Sidebar, Search" -->
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<div id="root" style="background:var(--bg-page)"></div>
+<script type="text/babel">
+const { Dialog, Tabs, Navbar, Sidebar, Search, Button } = window.BeautyRouteDesignSystem_b9f150;
+function Demo(){
+  const [tab,setTab]=React.useState("Overview");
+  const [open,setOpen]=React.useState(true);
+  return <div>
+    <Navbar links={["Discover","For professionals","Pricing"]} active="Discover" right={<Button variant="gold" size="sm">Get started</Button>} />
+    <div style={{display:'flex',height:260}}>
+      <Sidebar items={["Overview","Bookings","Portfolio","Services"]} active="Portfolio" />
+      <div style={{flex:1,padding:20,display:'flex',flexDirection:'column',gap:16}}>
+        <Search />
+        <Tabs tabs={["Overview","Services","Reviews"]} active={tab} onChange={setTab} />
+        <Button variant="secondary" size="sm" onClick={()=>setOpen(true)} style={{width:'fit-content'}}>Open dialog</Button>
+      </div>
+    </div>
+    <Dialog open={open} onClose={()=>setOpen(false)} title="Cancel appointment?" footer={<><Button variant="ghost" onClick={()=>setOpen(false)}>Back</Button><Button variant="primary" onClick={()=>setOpen(false)}>Cancel it</Button></>}>This can't be undone.</Dialog>
+  </div>;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script>

@@ -1,0 +1,30 @@
+<!-- @dsCard group="Client App" viewport="1440x820" name="Inspiration → Booking" -->
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script src="../../assets/i18n.global.js"></script>
+<script type="text/babel" src="ClientViews.jsx"></script>
+<div id="root" style="background:var(--bg-page);min-height:100vh"></div>
+<script type="text/babel">
+const { Navbar, Button, LanguageSwitcher } = window.BeautyRouteDesignSystem_b9f150;
+const NAV = [["Discover","nav.discover",InspirationView],["Matches","nav.matches",MatchView],["Bookings","nav.bookings",BookingsView],["Favorites","nav.favorites",FavoritesView],["AI Consultation","nav.ai",AIConsultView]];
+function App(){
+  const [page,setPage]=React.useState("Discover");
+  const [exp,setExp]=React.useState("women");
+  // Per-user language preference — restored from profile on login, persisted on change.
+  const [lang,setLang]=React.useState(()=>window.BRI18N.pickLocalized?localStorage.getItem("br.user.lang")||"en":"en");
+  React.useEffect(()=>{window.BRI18N.applyDir(lang);try{localStorage.setItem("br.user.lang",lang);}catch(e){}},[lang]);
+  const T=k=>window.BRI18N.t(k,lang);
+  const labelToKey={};NAV.forEach(([key,sk])=>{labelToKey[T(sk)]=key;});
+  const links=NAV.map(([,sk])=>T(sk));
+  const activeLabel=T(NAV.find(([key])=>key===page)[1]);
+  const Page = NAV.find(([key])=>key===page)[2];
+  return <div>
+    <Navbar links={links} active={activeLabel} onNavigate={l=>setPage(labelToKey[l])} right={<><LanguageSwitcher lang={lang} onChange={setLang} variant="compact" /><Button variant="gold" size="sm">{T("cta.bookNow")}</Button></>} />
+    <div style={{maxWidth:'var(--container-xl)',margin:'0 auto',padding:'40px var(--gutter-desktop)'}}><Page exp={exp} onExp={setExp} lang={lang} /></div>
+  </div>;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>

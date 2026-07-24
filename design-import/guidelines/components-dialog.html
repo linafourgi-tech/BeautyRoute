@@ -1,0 +1,14 @@
+<!-- @dsCard group="Components" viewport="700x260" name="Dialog" subtitle="Modal with scrim + soft blur" -->
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<div id="root" style="height:260px;position:relative;background:var(--bg-sunken)"></div>
+<script type="text/babel">
+const { Dialog, Button } = window.BeautyRouteDesignSystem_b9f150;
+function Demo(){
+  return <Dialog open onClose={()=>{}} title="Cancel appointment?" footer={<><Button variant="ghost">Back</Button><Button variant="primary">Cancel it</Button></>}>This can't be undone.</Dialog>;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script>

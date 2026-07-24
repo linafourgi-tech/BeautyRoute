@@ -1,0 +1,96 @@
+<!-- @dsCard group="Components" viewport="700x520" name="Forms — Primitives in context" subtitle="Component library specimen: each primitive shown in the screen it actually belongs on" -->
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<div id="root" style="padding:20px;background:var(--bg-page)"></div>
+<script type="text/babel">
+const { Button, Input, Select, Radio, IconButton, Checkbox, Switch, Badge } = window.BeautyRouteDesignSystem_b9f150;
+const accent = { hex: "#D4AF37", strong: "#B8942C", ink: "var(--charcoal-900)" };
+function Heart(){return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>;}
+function Panel({eyebrow,title,children}){
+  return <section style={{padding:22,borderRadius:'var(--radius-xl)',background:'var(--surface-card)',boxShadow:'var(--shadow-md)',display:'flex',flexDirection:'column',gap:14,fontFamily:'var(--font-body)'}}>
+    <div>
+      <div style={{fontSize:11,fontWeight:600,letterSpacing:'var(--ls-overline)',textTransform:'uppercase',color:accent.strong}}>{eyebrow}</div>
+      <h3 style={{fontFamily:'var(--font-display)',fontSize:'var(--text-h4)',color:'var(--text-primary)',margin:'4px 0 0'}}>{title}</h3>
+    </div>
+    {children}
+  </section>;
+}
+function AccentButton({children,size='md',variant='primary',style}){
+  const bg = variant==='primary'?accent.hex:'transparent';
+  const color = variant==='primary'?accent.ink:'var(--text-primary)';
+  const border = variant==='primary'?'none':'1px solid var(--border-default)';
+  const pad = size==='sm'?'8px 16px':'12px 22px';
+  return <button style={{background:bg,color,border,borderRadius:'var(--radius-pill)',padding:pad,fontSize:size==='sm'?13:14,fontWeight:600,fontFamily:'var(--font-body)',cursor:'pointer',...style}}>{children}</button>;
+}
+function Demo(){
+  const [loc,setLoc]=React.useState("salon");
+  const [today,setToday]=React.useState(true), [instant,setInstant]=React.useState(false), [mobile,setMobile]=React.useState(false);
+  const [rating,setRating]=React.useState("4"), [avail,setAvail]=React.useState(true), [accept,setAccept]=React.useState(false);
+  return <div style={{display:'flex',flexDirection:'column',gap:32,maxWidth:640,margin:'0 auto'}}>
+    <Panel eyebrow="Client · Booking screen" title="Confirm your appointment">
+      <div style={{padding:'10px 12px',borderRadius:'var(--radius-md)',background:'var(--bg-sunken)',display:'flex',flexDirection:'column',gap:4}}>
+        <div style={{fontSize:13,color:'var(--text-tertiary)'}}>Booking with</div>
+        <div style={{fontSize:14,fontWeight:500,color:'var(--text-primary)'}}>Lujain · Balayage touch-up</div>
+        <div style={{fontSize:12,color:'var(--text-tertiary)'}}>45 min · SAR 250</div>
+      </div>
+      <div style={{padding:'10px 12px',borderRadius:'var(--radius-md)',border:'1px solid var(--border-subtle)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div>
+          <div style={{fontSize:13,color:'var(--text-tertiary)'}}>Signed in as</div>
+          <div style={{fontSize:14,fontWeight:500,color:'var(--text-primary)'}}>Lina Al-Harbi · +966 5X XXX XXXX</div>
+        </div>
+        <Button variant="ghost" size="sm">Change</Button>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+        <Input label="Date" placeholder="Thu, Jul 24" />
+        <Input label="Time" placeholder="4:00 PM" />
+      </div>
+      <div>
+        <div style={{fontSize:13,fontWeight:500,color:'var(--text-secondary)',marginBottom:8}}>Where would you like your appointment?</div>
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          <Radio label="At the salon" checked={loc==='salon'} onChange={()=>setLoc('salon')} />
+          <Radio label="At my location" checked={loc==='client'} onChange={()=>setLoc('client')} />
+        </div>
+      </div>
+      <AccentButton>Book appointment</AccentButton>
+    </Panel>
+    <Panel eyebrow="Client · Discover screen" title="Search filters">
+      <Select label="Service category" placeholder="Any category" options={["Haircut","Hair color","Highlights","Balayage","Keratin","Blow dry","Extensions","Braids","Treatment"]} />
+      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+        <Checkbox label="Available today" checked={today} onChange={setToday} />
+        <Checkbox label="Accepts instant bookings" checked={instant} onChange={setInstant} />
+        <Checkbox label="Mobile service (comes to me)" checked={mobile} onChange={setMobile} />
+      </div>
+      <div>
+        <div style={{fontSize:13,fontWeight:500,color:'var(--text-secondary)',marginBottom:8}}>Minimum rating</div>
+        <div style={{display:'flex',gap:8}}>
+          {["3","4","4.5"].map(r=>(
+            <span key={r} onClick={()=>setRating(r)} style={{display:'inline-flex',alignItems:'center',padding:'6px 14px',borderRadius:'var(--radius-pill)',fontSize:13,cursor:'pointer',border:'1px solid '+(rating===r?accent.strong:'var(--border-default)'),background:rating===r?accent.hex:'transparent',color:rating===r?accent.ink:'var(--text-secondary)'}}>{r}★ &amp; up</span>
+          ))}
+        </div>
+      </div>
+      <div style={{display:'flex',gap:10}}>
+        <AccentButton variant="ghost" size="sm">Reset</AccentButton>
+        <AccentButton size="sm">Apply filters</AccentButton>
+      </div>
+    </Panel>
+    <Panel eyebrow="Professional · Settings screen" title="Availability">
+      <div style={{padding:'10px 12px',borderRadius:'var(--radius-md)',background:'var(--bg-sunken)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div style={{fontSize:13,color:'var(--text-secondary)'}}>Status</div>
+        <Badge tone={avail?"success":"neutral"}>{avail?"Open":"Paused"}</Badge>
+      </div>
+      <Switch label="Available for new bookings" checked={avail} onChange={setAvail} />
+      <Switch label="Accept instant bookings" checked={accept} onChange={setAccept} />
+      <Input label="Working hours" placeholder="10:00 AM – 9:00 PM" hint="Sat – Thu · Friday closed" />
+      <Input label="Service area" placeholder="Riyadh · within 15 km" />
+      <div style={{display:'flex',gap:10,alignItems:'center',marginTop:4}}>
+        <IconButton label="Save to favorites" icon={<Heart/>} active/>
+        <AccentButton size="sm" style={{marginInlineStart:'auto'}}>Save changes</AccentButton>
+      </div>
+    </Panel>
+  </div>;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script>

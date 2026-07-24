@@ -1,0 +1,37 @@
+<!-- @dsCard group="Authentication" viewport="1440x800" name="Sign In / Sign Up" -->
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script type="text/babel" src="AuthShell.jsx"></script>
+<div id="root"></div>
+<script type="text/babel">
+const { Input, Button, Checkbox } = window.BeautyRouteDesignSystem_b9f150;
+function App(){
+  const [mode,setMode]=React.useState("signin");
+  const [role,setRole]=React.useState("client");
+  const [remember,setRemember]=React.useState(true);
+  return <AuthShell>
+    <div style={{display:'flex',gap:8,marginBottom:28}}>
+      {["client","professional"].map(r=>(
+        <button key={r} onClick={()=>setRole(r)} style={{flex:1,padding:'10px 0',borderRadius:'var(--radius-pill)',border:'1px solid var(--border-default)',background:role===r?'var(--charcoal-900)':'transparent',color:role===r?'var(--ivory-100)':'var(--text-secondary)',fontSize:13,fontWeight:600,cursor:'pointer',textTransform:'capitalize'}}>{r}</button>
+      ))}
+    </div>
+    <h1 style={{fontFamily:'var(--font-display)',fontSize:'var(--text-h2)',color:'var(--text-primary)',margin:'0 0 6px'}}>{mode==='signin'?'Welcome back':'Create your account'}</h1>
+    <p style={{fontSize:14,color:'var(--text-tertiary)',margin:'0 0 28px'}}>{role==='client'?'Discover styles and book with real professionals.':'Manage your business and showcase your work.'}</p>
+    <div style={{display:'flex',flexDirection:'column',gap:16}}>
+      {mode==='signup' && <Input label="Full name" placeholder="Sara Al-Otaibi" />}
+      <Input label="Email" placeholder="you@example.com" />
+      <Input label="Password" type="password" placeholder="••••••••" />
+      {mode==='signin' && <Checkbox label="Remember me" checked={remember} onChange={setRemember} />}
+      <Button variant="gold" size="lg">{mode==='signin'?'Sign in':'Create account'}</Button>
+    </div>
+    <p style={{marginTop:24,fontSize:13,color:'var(--text-tertiary)',textAlign:'center'}}>
+      {mode==='signin'?"New to BeautyRoute? ":"Already have an account? "}
+      <a onClick={()=>setMode(mode==='signin'?'signup':'signin')} style={{cursor:'pointer'}}>{mode==='signin'?'Create an account':'Sign in'}</a>
+    </p>
+  </AuthShell>;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>

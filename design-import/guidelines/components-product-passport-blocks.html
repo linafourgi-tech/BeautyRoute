@@ -1,0 +1,24 @@
+<!-- @dsCard group="Components" viewport="700x420" name="Product — Passport Blocks" subtitle="AIInsightCard, Timeline, FormulaCard, ClientNotes, ReviewSummary, NotificationCenter, AvailabilityCalendar, BeforeAfterGallery" -->
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<div id="root" style="padding:20px;background:var(--bg-page)"></div>
+<script type="text/babel">
+const { AIInsightCard, Timeline, FormulaCard, ClientNotes, ReviewSummary, NotificationCenter, AvailabilityCalendar, BeforeAfterGallery, Button } = window.BeautyRouteDesignSystem_b9f150;
+const week=["Sat","Sun","Mon","Tue","Wed","Thu","Fri"].map((l,i)=>({label:l,date:24+i,slots:[{time:"10a"},{time:"1p",booked:i%3===0},{time:"4p"}]}));
+function Demo(){
+  return <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
+    <AIInsightCard kind="time" insight="Recommended touch-up in 6 weeks" detail="Based on Sara's balayage grow-out rate." action={<Button variant="gold" size="sm">Rebook</Button>} />
+    <FormulaCard title="Balayage · roots" date="12 Jun 2026" professional="Lujain" rows={[{label:"Base",value:"9.1"},{label:"Developer",value:"20 vol"},{label:"Timing",value:"35 min"}]} />
+    <div style={{gridColumn:'1 / -1'}}><ReviewSummary rating={4.9} total={214} breakdown={[{stars:5,pct:88},{stars:4,pct:9},{stars:3,pct:3}]} /></div>
+    <Timeline items={[{date:"12 Jun 2026",title:"Balayage",subtitle:"Lujain · 2h · SAR 480",meta:"Formula 9.1 + 20 vol"},{date:"1 May 2026",title:"Root touch-up",subtitle:"Lujain · 1h · SAR 220"}]} />
+    <ClientNotes notes={[{text:"Prefers cool blonde, no warmth. Sensitive scalp — use gentle bleach.",author:"Lujain",date:"12 Jun"}]} />
+    <div style={{gridColumn:'1 / -1'}}><NotificationCenter items={[{title:"Lujain has new availability this week",body:"Book your balayage touch-up",time:"2h",kind:"promo",unread:true},{title:"Your appointment is confirmed",body:"Thursday, 4:00 PM",time:"1d",kind:"booking"}]} /></div>
+    <AvailabilityCalendar week={week} />
+    <BeforeAfterGallery service="Balayage correction" date="12 Jun 2026" />
+  </div>;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script>

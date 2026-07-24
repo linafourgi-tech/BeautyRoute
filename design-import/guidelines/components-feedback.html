@@ -1,0 +1,30 @@
+<!-- @dsCard group="Components" viewport="700x260" name="Feedback" subtitle="Badge, Tag, Toast, Tooltip" -->
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<div id="root" style="padding:20px;background:var(--bg-page)"></div>
+<script type="text/babel">
+const { Badge, Tag, Toast, Tooltip, IconButton } = window.BeautyRouteDesignSystem_b9f150;
+function Demo(){
+  const [sel,setSel]=React.useState(true);
+  return <div style={{display:'flex',flexDirection:'column',gap:18,fontFamily:'var(--font-body)'}}>
+    <div style={{display:'flex',gap:10}}>
+      <Badge tone="success">Confirmed</Badge>
+      <Badge tone="warning">Pending</Badge>
+      <Badge tone="error">Cancelled</Badge>
+      <Badge tone="gold">Featured</Badge>
+      <Badge>Draft</Badge>
+    </div>
+    <div style={{display:'flex',gap:10}}>
+      <Tag selected={sel} onClick={()=>setSel(!sel)}>Balayage</Tag>
+      <Tag>Curly</Tag>
+      <Tag onRemove={()=>{}}>Bob</Tag>
+    </div>
+    <Toast tone="success" message="You're booked with Lujain, Thursday 4:00 PM." />
+    <Tooltip label="Save to favorites"><span style={{padding:'6px 10px',border:'1px solid var(--border-default)',borderRadius:8}}>Hover me</span></Tooltip>
+  </div>;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script>

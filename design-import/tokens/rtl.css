@@ -1,0 +1,3 @@
+:root{--dir-start:left;/* @kind other */--dir-end:right;/* @kind other */}
+[dir="rtl"]{--dir-start:right;/* @kind other */--dir-end:left;/* @kind other */}
+[dir="rtl"] body{font-family:var(--font-body),"Noto Kufi Arabic",sans-serif}

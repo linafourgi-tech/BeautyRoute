@@ -1,0 +1,2 @@
+# Client App UI Kit
+Four linked views reachable from the top nav: Discover (inspiration gallery with style tags + search), Matches (portfolio cards for professionals with real work in the selected style), Bookings (upcoming/past), AI Consultation (a simple two-step flow returning recommendation cards). Composes GalleryCard, PortfolioCard, BookingCard, AIRecommendationCard, Tag, Search, Tabs, Navbar, Button.
