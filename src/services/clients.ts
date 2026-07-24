@@ -11,7 +11,7 @@ export async function getClients(workspaceId: string) {
     .from('clients')
     .select('*')
     .eq('workspace_id', workspaceId)
-    .order('name', { ascending: true })
+    .order('full_name', { ascending: true })
   
   if (error) throw error
   return data

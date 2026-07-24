@@ -13,7 +13,7 @@ export async function getAppointments(workspaceId: string) {
       *,
       clients (
         id,
-        name,
+        full_name,
         email,
         phone
       )
