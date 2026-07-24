@@ -1,19 +1,84 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowUpRight, MapPin, Clock, Search, Navigation, Fuel, X } from "lucide-react";
-import { stylist, appointments, clients } from "../data/mockData";
 import Layout from "../components/Layout";
+import { getCurrentUser } from "../services/auth";
+import { getProfile } from "../services/profiles";
+import { getWorkspaces } from "../services/workspaces";
+import { getAppointments } from "../services/appointments";
+import { getClients } from "../services/clients";
+import { toAppointmentViewModel } from "../lib/appointmentView";
 
-const TODAY = "2026-07-19";
+function todayISODate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// clients table has no photo/avatar column — explicit placeholder, not fabricated.
+function toClientViewModel(row) {
+  return {
+    id: row.id,
+    name: row.full_name,
+    lastVisit: row.last_visit_at ? row.last_visit_at.slice(0, 10) : "No visits yet",
+    photo: null,
+  };
+}
 
 export default function StylistDashboard() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [appointments, setAppointments] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const todays = useMemo(
-    () => appointments.filter((a) => a.date === TODAY).sort((a, b) => a.time.localeCompare(b.time)),
-    []
-  );
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+
+      const user = await getCurrentUser();
+      if (user) {
+        const profile = await getProfile(user.id);
+        if (!cancelled) {
+          setFirstName((profile?.full_name || "there").split(" ")[0]);
+        }
+      }
+
+      const workspaces = await getWorkspaces();
+      const workspaceId = workspaces?.[0]?.id;
+      if (!workspaceId) {
+        if (!cancelled) {
+          setAppointments([]);
+          setClients([]);
+          setLoading(false);
+        }
+        return;
+      }
+
+      const [appointmentRows, clientRows] = await Promise.all([
+        getAppointments(workspaceId),
+        getClients(workspaceId),
+      ]);
+      if (cancelled) return;
+
+      setAppointments((appointmentRows ?? []).map(toAppointmentViewModel));
+      setClients((clientRows ?? []).map(toClientViewModel));
+      setLoading(false);
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const todays = useMemo(() => {
+    const today = todayISODate();
+    return appointments
+      .filter((a) => a.date === today)
+      .sort((a, b) => a.time.localeCompare(b.time));
+  }, [appointments]);
 
   const totalTravelMin = todays.reduce((s, a) => s + a.travelMinFromPrev, 0);
   const totalDistanceKm = todays.reduce((s, a) => s + a.distanceKmFromPrev, 0);
@@ -23,7 +88,7 @@ export default function StylistDashboard() {
     if (!query.trim()) return [];
     const q = query.toLowerCase();
     return clients.filter((c) => c.name.toLowerCase().includes(q));
-  }, [query]);
+  }, [query, clients]);
 
   function goToPassport(clientId) {
     setQuery("");
@@ -32,7 +97,7 @@ export default function StylistDashboard() {
 
   return (
     <Layout
-      title={`Good to see you, ${stylist.name.split(" ")[0]}`}
+      title={loading ? "Good to see you" : `Good to see you, ${firstName}`}
       titleAr="أهلاً بك"
       subtitle="Your route, your day, and every client's Beauty Passport — one search away."
     >
@@ -100,7 +165,8 @@ export default function StylistDashboard() {
           </div>
 
           <div className="space-y-4">
-            {todays.length === 0 && (
+            {loading && <p className="text-muted text-sm">Loading today's route…</p>}
+            {!loading && todays.length === 0 && (
               <p className="text-muted text-sm">No visits scheduled today. Enjoy the quiet.</p>
             )}
             {todays.map((a, i) => (

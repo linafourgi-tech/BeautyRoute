@@ -5,7 +5,7 @@ type Appointment = Database['public']['Tables']['appointments']['Row']
 type InsertAppointment = Database['public']['Tables']['appointments']['Insert']
 type UpdateAppointment = Database['public']['Tables']['appointments']['Update']
 
-// 1. Get all appointments for a salon with client details attached
+// 1. Get all appointments for a salon with client and booked-service details attached
 export async function getAppointments(workspaceId: string) {
   const { data, error } = await supabase
     .from('appointments')
@@ -16,11 +16,20 @@ export async function getAppointments(workspaceId: string) {
         full_name,
         email,
         phone
+      ),
+      appointment_services (
+        custom_price,
+        services (
+          id,
+          name,
+          price,
+          duration_minutes
+        )
       )
     `)
     .eq('workspace_id', workspaceId)
     .order('start_time', { ascending: true })
-  
+
   if (error) throw error
   return data
 }

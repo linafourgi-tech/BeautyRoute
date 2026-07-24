@@ -1,12 +1,52 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MapPin, Clock, Plus } from "lucide-react";
-import { appointments } from "../data/mockData";
 import Layout from "../components/Layout";
-
-const dates = [...new Set(appointments.map((a) => a.date))].sort();
+import { getAppointments } from "../services/appointments";
+import { getWorkspaces } from "../services/workspaces";
+import { toAppointmentViewModel } from "../lib/appointmentView";
 
 export default function Appointments() {
-  const [active, setActive] = useState(dates[0]);
+  const [appointments, setAppointments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [active, setActive] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      const workspaces = await getWorkspaces();
+      const workspaceId = workspaces?.[0]?.id;
+      if (!workspaceId) {
+        if (!cancelled) {
+          setAppointments([]);
+          setLoading(false);
+        }
+        return;
+      }
+      const rows = await getAppointments(workspaceId);
+      if (cancelled) return;
+      setAppointments((rows ?? []).map(toAppointmentViewModel));
+      setLoading(false);
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const dates = useMemo(
+    () => [...new Set(appointments.map((a) => a.date))].sort(),
+    [appointments]
+  );
+
+  useEffect(() => {
+    if (dates.length > 0 && !dates.includes(active)) {
+      setActive(dates[0]);
+    }
+  }, [dates, active]);
+
   const dayAppts = appointments.filter((a) => a.date === active);
 
   return (
@@ -34,7 +74,8 @@ export default function Appointments() {
       </div>
 
       <div className="space-y-3">
-        {dayAppts.length === 0 && (
+        {loading && <p className="text-muted text-sm">Loading appointments…</p>}
+        {!loading && dayAppts.length === 0 && (
           <p className="text-muted text-sm">Nothing booked this day yet.</p>
         )}
         {dayAppts.map((a) => (
