@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowUpRight, MapPin, Clock, Search, Navigation, Fuel, X } from "lucide-react";
 import Layout from "../components/Layout";
-import { getCurrentUser } from "../services/auth";
-import { getProfile } from "../services/profiles";
-import { getWorkspaces } from "../services/workspaces";
+import { useSession } from "../hooks/useSession";
+import { useCurrentWorkspace } from "../hooks/useCurrentWorkspace";
 import { getAppointments } from "../services/appointments";
 import { getClients } from "../services/clients";
 import { toAppointmentViewModel } from "../lib/appointmentView";
+import { Skeleton, EmptyState } from "../components/ui";
+import { ErrorState } from "../components/ErrorState";
+import "../styles/beautyroute/styles.css";
 
 function todayISODate() {
   return new Date().toISOString().slice(0, 10);
@@ -26,27 +28,26 @@ function toClientViewModel(row) {
 export default function StylistDashboard() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
-  const [firstName, setFirstName] = useState("");
+  const { profile } = useSession();
+  const { workspaceId, loading: workspaceLoading, error: workspaceError, refresh: refreshWorkspace } = useCurrentWorkspace();
+
   const [appointments, setAppointments] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  const firstName = (profile?.full_name || "there").split(" ")[0];
 
   useEffect(() => {
+    if (workspaceLoading) return;
+
     let cancelled = false;
 
     async function load() {
       setLoading(true);
+      setError(null);
 
-      const user = await getCurrentUser();
-      if (user) {
-        const profile = await getProfile(user.id);
-        if (!cancelled) {
-          setFirstName((profile?.full_name || "there").split(" ")[0]);
-        }
-      }
-
-      const workspaces = await getWorkspaces();
-      const workspaceId = workspaces?.[0]?.id;
       if (!workspaceId) {
         if (!cancelled) {
           setAppointments([]);
@@ -56,22 +57,31 @@ export default function StylistDashboard() {
         return;
       }
 
-      const [appointmentRows, clientRows] = await Promise.all([
-        getAppointments(workspaceId),
-        getClients(workspaceId),
-      ]);
-      if (cancelled) return;
-
-      setAppointments((appointmentRows ?? []).map(toAppointmentViewModel));
-      setClients((clientRows ?? []).map(toClientViewModel));
-      setLoading(false);
+      try {
+        const [appointmentRows, clientRows] = await Promise.all([
+          getAppointments(workspaceId),
+          getClients(workspaceId),
+        ]);
+        if (cancelled) return;
+        setAppointments((appointmentRows ?? []).map(toAppointmentViewModel));
+        setClients((clientRows ?? []).map(toClientViewModel));
+      } catch (err) {
+        if (!cancelled) setError(err.message || "Couldn't load your dashboard.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
 
     load();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [workspaceId, workspaceLoading, reloadToken]);
+
+  function retry() {
+    refreshWorkspace();
+    setReloadToken((t) => t + 1);
+  }
 
   const todays = useMemo(() => {
     const today = todayISODate();
@@ -95,9 +105,12 @@ export default function StylistDashboard() {
     navigate(`/passport?client=${clientId}`);
   }
 
+  const isLoading = workspaceLoading || loading;
+  const failed = workspaceError || error;
+
   return (
     <Layout
-      title={loading ? "Good to see you" : `Good to see you, ${firstName}`}
+      title={isLoading ? "Good to see you" : `Good to see you, ${firstName}`}
       titleAr="أهلاً بك"
       subtitle="Your route, your day, and every client's Beauty Passport — one search away."
     >
@@ -141,87 +154,100 @@ export default function StylistDashboard() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Today's route */}
-        <section className="lg:col-span-2 rounded-3xl border border-line bg-surface p-7 md:p-8">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="font-display text-2xl text-ivory">Today's route</h2>
-            <Link to="/route" className="text-sm text-wine flex items-center gap-1 hover:underline">
-              Full map <ArrowUpRight size={14} />
-            </Link>
-          </div>
+      {failed && <ErrorState message={typeof failed === "string" ? failed : failed.message} onRetry={retry} />}
 
-          <div className="aspect-[16/7] rounded-2xl bg-surface-2 border border-line flex items-center justify-center mb-6">
-            <div className="text-center text-muted">
-              <Navigation size={24} className="mx-auto mb-2 text-wine" />
-              <p className="text-sm">Live route map — wire up Google Maps / Mapbox here</p>
+      {!failed && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Today's route */}
+          <section className="lg:col-span-2 rounded-3xl border border-line bg-surface p-7 md:p-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="font-display text-2xl text-ivory">Today's route</h2>
+              <Link to="/route" className="text-sm text-wine flex items-center gap-1 hover:underline">
+                Full map <ArrowUpRight size={14} />
+              </Link>
             </div>
-          </div>
 
-          <div className="grid grid-cols-3 gap-3 mb-6">
-            <RouteStat icon={MapPin} label="Stops" value={todays.length} />
-            <RouteStat icon={Clock} label="Drive time" value={`${totalTravelMin} min`} />
-            <RouteStat icon={Fuel} label="Est. fuel" value={`SAR ${fuelEstimate}`} />
-          </div>
-
-          <div className="space-y-4">
-            {loading && <p className="text-muted text-sm">Loading today's route…</p>}
-            {!loading && todays.length === 0 && (
-              <p className="text-muted text-sm">No visits scheduled today. Enjoy the quiet.</p>
-            )}
-            {todays.map((a, i) => (
-              <div key={a.id}>
-                {i > 0 && (
-                  <div className="flex items-center gap-2 text-xs text-muted pl-5 py-2">
-                    <Navigation size={11} className="text-gold" />
-                    {a.travelMinFromPrev} min · {a.distanceKmFromPrev} km to next stop
-                  </div>
-                )}
-                <button
-                  onClick={() => goToPassport(a.clientId)}
-                  className="w-full flex items-center gap-4 rounded-2xl border border-line bg-surface-2 px-5 py-4 text-left hover:border-wine/50 transition-colors"
-                >
-                  <div className="font-mono-tag text-wine text-sm w-14 shrink-0">{a.time}</div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-ivory text-sm font-medium truncate">{a.client} · {a.service}</p>
-                    <p className="text-muted text-xs flex items-center gap-1 mt-1">
-                      <MapPin size={12} /> {a.location}
-                    </p>
-                  </div>
-                  <span className={`text-[11px] uppercase tracking-wide px-3 py-1.5 rounded-full border shrink-0 ${
-                    a.status === "confirmed" ? "border-sage text-sage" : "border-gold text-gold"
-                  }`}>
-                    {a.status}
-                  </span>
-                </button>
+            <div className="aspect-[16/7] rounded-2xl bg-surface-2 border border-line flex items-center justify-center mb-6">
+              <div className="text-center text-muted">
+                <Navigation size={24} className="mx-auto mb-2 text-wine" />
+                <p className="text-sm">Live route map — wire up Google Maps / Mapbox here</p>
               </div>
-            ))}
-          </div>
-        </section>
+            </div>
 
-        {/* Quick stats */}
-        <section className="rounded-3xl border border-line bg-surface p-7 md:p-8 flex flex-col gap-6 h-fit">
-          <h2 className="font-display text-2xl text-ivory">This month</h2>
-          <div>
-            <p className="text-3xl font-display text-wine">{clients.length}</p>
-            <p className="text-muted text-sm mt-1">active client passports</p>
-          </div>
-          <div>
-            <p className="text-3xl font-display text-wine">SAR 5,600</p>
-            <p className="text-muted text-sm mt-1">revenue so far</p>
-          </div>
-          <div>
-            <p className="text-3xl font-display text-wine">4.9 ★</p>
-            <p className="text-muted text-sm mt-1">average client rating</p>
-          </div>
-          <Link
-            to="/passport"
-            className="mt-2 text-center rounded-2xl border border-line text-ivory text-sm font-medium py-3.5 hover:bg-surface-2 transition-colors"
-          >
-            Browse all passports
-          </Link>
-        </section>
-      </div>
+            <div className="grid grid-cols-3 gap-3 mb-6">
+              <RouteStat icon={MapPin} label="Stops" value={isLoading ? "—" : todays.length} />
+              <RouteStat icon={Clock} label="Drive time" value={isLoading ? "—" : `${totalTravelMin} min`} />
+              <RouteStat icon={Fuel} label="Est. fuel" value={isLoading ? "—" : `SAR ${fuelEstimate}`} />
+            </div>
+
+            <div className="space-y-4">
+              {isLoading && (
+                <div className="beautyroute-ds space-y-3">
+                  <Skeleton height={56} radius="var(--radius-lg)" />
+                  <Skeleton height={56} radius="var(--radius-lg)" />
+                </div>
+              )}
+
+              {!isLoading && todays.length === 0 && (
+                <div className="beautyroute-ds">
+                  <EmptyState title="No visits scheduled today" description="Enjoy the quiet — today's bookings will show up here." />
+                </div>
+              )}
+
+              {!isLoading && todays.map((a, i) => (
+                <div key={a.id}>
+                  {i > 0 && (
+                    <div className="flex items-center gap-2 text-xs text-muted pl-5 py-2">
+                      <Navigation size={11} className="text-gold" />
+                      {a.travelMinFromPrev} min · {a.distanceKmFromPrev} km to next stop
+                    </div>
+                  )}
+                  <button
+                    onClick={() => goToPassport(a.clientId)}
+                    className="w-full flex items-center gap-4 rounded-2xl border border-line bg-surface-2 px-5 py-4 text-left hover:border-wine/50 transition-colors"
+                  >
+                    <div className="font-mono-tag text-wine text-sm w-14 shrink-0">{a.time}</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-ivory text-sm font-medium truncate">{a.client} · {a.service}</p>
+                      <p className="text-muted text-xs flex items-center gap-1 mt-1">
+                        <MapPin size={12} /> {a.location}
+                      </p>
+                    </div>
+                    <span className={`text-[11px] uppercase tracking-wide px-3 py-1.5 rounded-full border shrink-0 ${
+                      a.status === "confirmed" ? "border-sage text-sage" : "border-gold text-gold"
+                    }`}>
+                      {a.status}
+                    </span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Quick stats */}
+          <section className="rounded-3xl border border-line bg-surface p-7 md:p-8 flex flex-col gap-6 h-fit">
+            <h2 className="font-display text-2xl text-ivory">This month</h2>
+            <div>
+              <p className="text-3xl font-display text-wine">{isLoading ? "—" : clients.length}</p>
+              <p className="text-muted text-sm mt-1">active client passports</p>
+            </div>
+            <div>
+              <p className="text-3xl font-display text-wine">SAR 5,600</p>
+              <p className="text-muted text-sm mt-1">revenue so far</p>
+            </div>
+            <div>
+              <p className="text-3xl font-display text-wine">4.9 ★</p>
+              <p className="text-muted text-sm mt-1">average client rating</p>
+            </div>
+            <Link
+              to="/passport"
+              className="mt-2 text-center rounded-2xl border border-line text-ivory text-sm font-medium py-3.5 hover:bg-surface-2 transition-colors"
+            >
+              Browse all passports
+            </Link>
+          </section>
+        </div>
+      )}
     </Layout>
   );
 }
