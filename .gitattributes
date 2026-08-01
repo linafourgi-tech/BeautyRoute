@@ -1,0 +1,26 @@
+# Line-ending policy for this repository.
+#
+# `text=auto` lets Git decide text vs. binary per file and normalize line
+# endings to LF in the repository (working-tree behavior still follows the
+# user's core.autocrlf). The explicit rules below pin LF for every source
+# and text file type actually used in this repo, regardless of local
+# core.autocrlf settings, so history stays consistent across contributors.
+#
+# No Windows-specific script files (.ps1, .bat, .cmd) currently exist in
+# this repository, so no CRLF override is defined. If one is ever added,
+# give it an explicit `text eol=crlf` rule here rather than falling back to
+# the auto default.
+
+* text=auto
+
+*.js  text eol=lf
+*.jsx text eol=lf
+*.ts  text eol=lf
+*.tsx text eol=lf
+*.css text eol=lf
+*.json text eol=lf
+*.md  text eol=lf
+*.sql text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh  text eol=lf
