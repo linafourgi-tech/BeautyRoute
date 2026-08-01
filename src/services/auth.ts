@@ -1,12 +1,13 @@
 import { supabase } from '../lib/supabase'
 
 // 1. Sign up a new user (Salon owner / Manager)
-export async function signUpUser(email: string, password: string) {
+export async function signUpUser(email: string, password: string, metadata: Record<string, unknown> = {}) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
+    options: { data: metadata },
   })
-  
+
   if (error) throw error
   return data
 }
