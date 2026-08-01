@@ -1,0 +1,248 @@
+# BeautyRoute Development Roadmap
+
+**Document type:** Internal project governance document. Planning and status tracking only — this file does not itself change, and is not evidence of a change to, any application code, database schema, or infrastructure.
+**Maintained by:** BeautyRoute Founding Team
+**Last updated:** 2026-08-01
+
+---
+
+## Project Vision
+
+BeautyRoute exists to give independent beauty professionals and small salons the same operational backbone that large chains take for granted — client history, scheduling, route-optimized mobile appointments, and AI-assisted business intelligence — without the cost or complexity of enterprise salon software. Long term, BeautyRoute aims to be the default operating system for independent beauty professionals across their full workflow: booking, client relationship management, on-the-go routing between appointments, personalized service recommendations (including AI-driven face-shape and style guidance), and the commercial infrastructure (marketplace, payments, notifications) needed to run a real business on top of it. The product is being built to graduate from a student project into a maintainable, licensable, commercially viable SaaS platform — not a one-off demo.
+
+---
+
+## Current Status
+
+BeautyRoute has a working frontend and backend foundation with core workspace, client, and scheduling data flowing through Supabase under row-level-security enforcement, plus an initial AI feature already live in production code and a second, larger AI initiative in the research/specification stage.
+
+- **Frontend foundation:** React 19 + Vite + Tailwind v4 single-page app with client-side routing (react-router-dom), a dedicated design-token system (`src/styles/beautyroute/`), and a growing internal UI component library (`src/components/ui/` — Button, Dialog, Table, Toast, Tooltip, Skeleton, Tag, Badge, and others) used consistently across pages.
+- **Supabase backend:** `@supabase/supabase-js` client integration, two live Edge Functions (`ai-assistant`, `route-planner`) with shared server-side plan-gating logic (`supabase/functions/_shared/planRules.ts`), and a `supabase/config.toml` project configuration.
+- **Database schema:** A committed `schema.sql` baseline plus an incremental migration history covering row-level-security policies, workspace-membership recursion fixes, audit-trigger RLS, and professional onboarding state. Some recent migrations were used to insert and then clean up verification/test data directly in migration history — flagged as a process risk (see Risks) rather than a schema defect.
+- **Authentication foundation:** Login/Signup pages, session handling (`src/hooks/useSession.ts`, `src/services/auth.ts`), workspace-scoped route protection (`src/components/routing/ProtectedRoute.jsx`, `OnboardingRoute.jsx`), and a dev-only auth bootstrap gated behind `import.meta.env.DEV`. Authorization is enforced through Supabase RLS policies keyed on workspace membership, not client-side checks alone.
+- **Documentation:** `docs/ai/` contains a complete, source-cited research trail for the face-shape classifier initiative (dataset research, comparison, decision, literature review, architecture selection, model specification). This document (`docs/PROJECT_ROADMAP.md`) is the first piece of broader, non-AI-specific project governance documentation.
+- **AI research:** Two parallel AI efforts exist at very different maturity levels. (1) The **AI Assistant** (Claude-powered client-summary, next-visit-suggestion, aftercare-guidance, and workspace chat features) is implemented and live in `supabase/functions/ai-assistant/index.ts`, with server-side plan gating, rate limiting, and RLS-scoped data access. (2) **BR-FS-001**, the face-shape classifier, has completed dataset research, architecture selection (MobileNetV3-Large recommended), and a full model specification — but is explicitly blocked from implementation pending dataset licensing review (status: REQUIRES LICENSE REVIEW). No BR-FS-001 model code exists yet, by design.
+- **Business model research:** A subscription/plan-tier data model exists end-to-end in design (`src/lib/plans.js`, `src/services/subscription.ts`, `src/pages/Pricing.jsx`, `src/components/subscription/FeatureGate.jsx`, `TrialBanner.jsx`, `UpgradeRequired.jsx`) with server-side feature gating already mirrored into the AI Assistant Edge Function. Actual payment processing is not yet integrated — the codebase contains an explicit forward-reference to Stripe as future work, not a working integration.
+
+---
+
+## Development Phases
+
+### Phase 1A — Repository Foundation & Audit
+
+- **Objective:** Establish a clean, auditable baseline of the codebase, confirm no secrets or unresolved hazards exist in version control, and surface repository-hygiene issues before further feature work.
+- **Main Deliverables:** Baseline repository commit; general repository health audit covering secrets exposure, dependency licensing, stray/dead files, migration hygiene, and test coverage.
+- **Status:** Completed
+- **Definition of Done:** Repository audited end-to-end; findings documented and communicated to the team; no committed secrets found; no blocking issues left unflagged.
+- **Dependencies:** None.
+- **Priority:** Critical
+- **Estimated Complexity:** Small
+- **Owner:** Founding Engineer
+
+### Phase 1B — Project Documentation & Governance
+
+- **Objective:** Establish the internal documentation and governance artifacts a professional software company would maintain — roadmap, status tracking, decision records — independent of any single feature.
+- **Main Deliverables:** `docs/PROJECT_ROADMAP.md` (this document); the AI research documentation set under `docs/ai/`; ongoing change-log discipline (see Change Log below).
+- **Status:** In Progress
+- **Definition of Done:** Roadmap published and kept current at each phase transition; every major initiative (AI, commerce, security) has a discoverable, source-of-truth document.
+- **Dependencies:** Phase 1A.
+- **Priority:** Critical
+- **Estimated Complexity:** Small
+- **Owner:** Founding Engineer / AI Research Lead
+
+### Phase 2 — Supabase Integration
+
+- **Objective:** Stand up Supabase as the system of record for authentication, data storage, RLS-enforced authorization, and serverless business logic.
+- **Main Deliverables:** Supabase client integration; project configuration (`supabase/config.toml`); Edge Functions runtime and shared plan-rules module; database schema baseline and migration history.
+- **Status:** Completed
+- **Definition of Done:** Frontend reads/writes through the Supabase client under RLS; Edge Functions deployed and callable; schema migrations apply cleanly from a fresh database.
+- **Dependencies:** Phase 1A.
+- **Priority:** Critical
+- **Estimated Complexity:** Medium
+- **Owner:** Backend Engineer
+
+### Phase 3 — Authentication
+
+- **Objective:** Provide secure, workspace-scoped sign-up, sign-in, and session management as the entry point to the product.
+- **Main Deliverables:** Login/Signup pages; session hook and auth service; protected/onboarding route guards; RLS-based workspace-membership authorization; onboarding flow (`src/pages/Onboarding.jsx` and `src/components/onboarding/*`).
+- **Status:** Completed
+- **Definition of Done:** A new user can sign up, complete onboarding, and reach a workspace whose data is correctly scoped and inaccessible to other workspaces, verified against RLS policies rather than client-side checks alone.
+- **Dependencies:** Phase 2.
+- **Priority:** Critical
+- **Estimated Complexity:** Medium
+- **Owner:** Backend Engineer / Founding Engineer
+
+### Phase 4 — Beauty Passport
+
+- **Objective:** Give each client a persistent, professional-facing profile of preferences, history, allergies, and formulas that professionals can reference and build on over time.
+- **Main Deliverables:** `src/pages/BeautyPassport.jsx`; supporting client/visit data services (`src/services/clients.ts`, `src/services/visits.ts`).
+- **Status:** In Progress
+- **Definition of Done:** A professional can view and update a client's Beauty Passport, and the data correctly feeds downstream features (AI Assistant client summaries, aftercare guidance) without duplication of source-of-truth data.
+- **Dependencies:** Phase 2, Phase 3.
+- **Priority:** High
+- **Estimated Complexity:** Medium
+- **Owner:** Full-stack Engineer
+
+### Phase 5 — Appointment System
+
+- **Objective:** Deliver end-to-end appointment scheduling, status tracking, and service association wired to real backend data.
+- **Main Deliverables:** `src/pages/Appointments.jsx`; `src/services/appointments.ts`; `src/lib/appointmentView.js`; service/service-template data model (`src/services/services.ts`, `serviceTemplates.ts`).
+- **Status:** In Progress
+- **Definition of Done:** Professionals can create, view, update, and cancel appointments against live Supabase data, with correct workspace scoping and status transitions.
+- **Dependencies:** Phase 2, Phase 3, Phase 4.
+- **Priority:** Critical
+- **Estimated Complexity:** Large
+- **Owner:** Full-stack Engineer
+
+### Phase 6 — Marketplace
+
+- **Objective:** Enable clients to discover and book independent professionals/salons through a shared marketplace surface, beyond a single professional's existing client base.
+- **Main Deliverables:** Marketplace browsing/discovery UI; public professional/salon profile pages; search and filtering; booking handoff into the existing Appointment System.
+- **Status:** Planned
+- **Definition of Done:** A prospective client can discover a professional through the marketplace and complete a booking without prior direct relationship, and the professional's existing workspace data model supports being listed.
+- **Dependencies:** Phase 4, Phase 5.
+- **Priority:** Medium
+- **Estimated Complexity:** Large
+- **Owner:** Unassigned
+
+### Phase 7 — Payments
+
+- **Objective:** Convert the existing plan/subscription data model into real, billable commerce, and support in-app payment collection for bookings where applicable.
+- **Main Deliverables:** Stripe (or equivalent) integration for subscription billing; webhook-driven `subscription_status`/`plan_tier` updates (currently a manual/placeholder field per `src/services/subscription.ts`); payment collection flow for marketplace bookings, if in scope.
+- **Status:** Planned
+- **Definition of Done:** A workspace can upgrade/downgrade/cancel a real subscription through a real payment processor, with server-side state kept in sync via webhooks rather than client-asserted values; the existing `FeatureGate`/`hasFeature()` gating logic (already mirrored server-side in the AI Assistant function) correctly reflects live billing state.
+- **Dependencies:** Phase 2, Phase 3.
+- **Priority:** High
+- **Estimated Complexity:** Large
+- **Owner:** Unassigned
+
+### Phase 8 — Notifications
+
+- **Objective:** Keep professionals and clients informed of appointment changes, reminders, and business-relevant events without requiring them to be inside the app.
+- **Main Deliverables:** Notification data model and delivery channel(s) (email and/or SMS and/or push, to be decided); appointment reminder and status-change triggers; notification preference controls.
+- **Status:** Planned
+- **Definition of Done:** Appointment creation, changes, and cancellations reliably trigger the appropriate notification to the correct recipient, with an auditable delivery record and user-controllable preferences.
+- **Dependencies:** Phase 5.
+- **Priority:** Medium
+- **Estimated Complexity:** Medium
+- **Owner:** Unassigned
+
+### Phase 9 — Maps & Routing
+
+- **Objective:** Let mobile/on-the-go professionals see an optimized route between appointments, reducing dead travel time between clients.
+- **Main Deliverables:** `src/pages/RouteEngine.jsx`; `src/components/RouteMap.jsx`; `src/lib/routeOptimizer.js`; `src/services/route.ts`; `supabase/functions/route-planner/index.ts` (server-side routing using a secret Mapbox token, never exposed to the browser); Mapbox GL JS integration with a documented public/secret token split in `.env.example`.
+- **Status:** Completed
+- **Definition of Done:** A professional's day of appointments renders as an optimized route on a live map, computed server-side, with graceful degradation when the map token is not configured. **Met** — live-verified against real Mapbox APIs (geocoding, matrix, directions) and the real Supabase backend, including schedule-conflict detection, cross-workspace/tamper protection, and timezone-aware date handling. Three defects found during verification were fixed and re-verified live. See `docs/verification/PHASE_12_LIVE_VERIFICATION_REPORT.md` for the full record (filed under "Phase 12," the label used for this verification pass at the time — it covers this Phase 9 item; see Change Log).
+- **Dependencies:** Phase 2, Phase 5.
+- **Priority:** High
+- **Estimated Complexity:** Large
+- **Owner:** Full-stack Engineer
+
+### Phase 10 — AI Platform
+
+- **Objective:** Deliver differentiated, genuinely useful AI features across two tracks — (a) an operational AI Assistant for day-to-day business questions, and (b) a purpose-built, self-hosted face-shape classifier (BR-FS-001) that does not depend on a paid third-party model API.
+- **Main Deliverables:**
+  - *AI Assistant track:* `supabase/functions/ai-assistant/index.ts` (client summaries, next-visit suggestions, aftercare guidance, workspace chat with tool use), server-side plan gating and rate limiting, `src/pages/AIEngine.jsx`, `src/services/ai.ts`.
+  - *BR-FS-001 track:* `docs/ai/FACE_SHAPE_DATASET_RESEARCH.md`, `FACE_SHAPE_COMPARISON.md`, `FACE_SHAPE_DECISION.md`, `BR-FS-001_LITERATURE_REVIEW.md`, `BR-FS-001_ARCHITECTURE_SELECTION.md`, `BR-FS-001_MODEL_SPECIFICATION.md`.
+- **Status:** In Progress
+- **Definition of Done:** *AI Assistant track:* feature is live, plan-gated, and rate-limited in production (met). *BR-FS-001 track:* dataset licensing gate resolved (REQUIRES LICENSE REVIEW → cleared), MobileNetV3-Large baseline trained and benchmarked against a literature-precedented backbone (Xception or EfficientNetV2S) as specified, and a reviewed, approved model artifact exists — none of which has started, by design, until the licensing gate clears.
+- **Dependencies:** Phase 2, Phase 3 (AI Assistant track); dataset licensing resolution, external to this codebase (BR-FS-001 track).
+- **Priority:** High
+- **Estimated Complexity:** Large
+- **Owner:** AI Research Lead
+
+### Phase 11 — Testing
+
+- **Objective:** Introduce automated test coverage before the codebase grows further, given that zero automated tests currently exist anywhere in the repository.
+- **Main Deliverables:** Test runner/framework selection and setup; unit tests for business-critical logic (plan gating, RLS-adjacent authorization checks, route optimization); integration tests for Edge Functions; a CI gate that runs tests on every change.
+- **Status:** Planned
+- **Definition of Done:** Core business logic (subscription/plan gating, authentication/authorization boundaries, appointment scheduling logic) has automated test coverage, and CI fails the build on a broken test.
+- **Dependencies:** Phases 2–9 (tests need real features to test).
+- **Priority:** Critical
+- **Estimated Complexity:** Large
+- **Owner:** Unassigned
+
+### Phase 12 — Security Review
+
+- **Objective:** Formally review authentication, authorization (RLS), secret handling, and third-party API exposure across the full application before wider release.
+- **Main Deliverables:** A documented security review covering RLS policy correctness, Edge Function authorization boundaries, secret/token handling (Supabase keys, Anthropic API key, Mapbox tokens), and dependency licensing exposure.
+- **Status:** Planned
+- **Definition of Done:** A formal review is completed and its findings addressed or explicitly accepted as known risk, with no unresolved critical or high-severity findings.
+- **Dependencies:** Phases 2–10.
+- **Priority:** Critical
+- **Estimated Complexity:** Medium
+- **Owner:** Unassigned
+
+### Phase 13 — Performance Optimization
+
+- **Objective:** Ensure the application performs acceptably under realistic multi-workspace, multi-appointment load before beta traffic arrives.
+- **Main Deliverables:** Frontend bundle/performance audit; database query/index review against real usage patterns; Edge Function latency review (the AI Assistant already enforces internal timeouts and a bounded tool-use loop as a starting point).
+- **Status:** Planned
+- **Definition of Done:** Defined performance budgets (page load, query latency, Edge Function response time) are met under a realistic simulated load.
+- **Dependencies:** Phases 2–10.
+- **Priority:** Medium
+- **Estimated Complexity:** Medium
+- **Owner:** Unassigned
+
+### Phase 14 — Deployment
+
+- **Objective:** Establish a repeatable, automated deployment pipeline; none currently exists (no CI/CD configuration is present in the repository today).
+- **Main Deliverables:** CI/CD pipeline (build, lint, test, deploy); environment/secrets management for staging and production; deployment runbook.
+- **Status:** Planned
+- **Definition of Done:** A change merged to the main branch can be deployed to staging and then production through a repeatable, documented, automated process — not a manual one.
+- **Dependencies:** Phase 11, Phase 12.
+- **Priority:** Critical
+- **Estimated Complexity:** Medium
+- **Owner:** Unassigned
+
+### Phase 15 — Beta Launch
+
+- **Objective:** Release BeautyRoute to a limited set of real professionals to validate the core workflow under real-world conditions before general availability.
+- **Main Deliverables:** Beta cohort recruitment; feedback-collection process; monitoring/alerting for the beta environment; a defined beta exit criteria.
+- **Status:** Planned
+- **Definition of Done:** A defined cohort of real professionals actively uses BeautyRoute for real appointments over a sustained period, with feedback collected and critical issues resolved.
+- **Dependencies:** Phases 11–14.
+- **Priority:** High
+- **Estimated Complexity:** Medium
+- **Owner:** Unassigned
+
+### Phase 16 — Production Launch
+
+- **Objective:** Open BeautyRoute to general availability as a commercial product.
+- **Main Deliverables:** Public launch plan; finalized pricing and billing (Phase 7 complete); production support process; post-launch monitoring.
+- **Status:** Planned
+- **Definition of Done:** BeautyRoute is generally available, billable, monitored, and supportable without founder-only intervention for routine issues.
+- **Dependencies:** Phase 15 and all preceding phases.
+- **Priority:** Critical
+- **Estimated Complexity:** Large
+- **Owner:** Unassigned
+
+---
+
+## Risks
+
+- **Mock/placeholder data in early development flows.** Some flows were validated using seeded or placeholder data during early Supabase integration; this must be fully retired before Beta Launch (Phase 15) to avoid conflating "looks correct with seed data" with "is correct under real usage."
+- **Dataset licensing (BR-FS-001).** The face-shape classifier's underlying training data is not cleared for use — status is **REQUIRES LICENSE REVIEW** per `docs/ai/FACE_SHAPE_DECISION.md`. This blocks all BR-FS-001 implementation work and has no committed resolution date; it depends on external parties (dataset creators/authors) responding to outreach.
+- **No automated tests exist anywhere in the repository today.** Every feature currently shipped (auth, appointments, AI Assistant, routing) relies on manual verification only. This is an accepted, explicit risk until Phase 11 is completed, and it grows more expensive to close the longer it's deferred.
+- **Future commercial licensing exposure.** Two dependencies carry licensing terms that need active tracking as the project moves from graduation project to commercial product: Mapbox GL JS (proprietary license since v2, usage-based account terms) and the eventual BR-FS-001 training dataset (pending Phase 10's licensing resolution). Neither is a defect today, but both require ongoing diligence rather than a one-time check.
+- **Payments are not yet real.** The subscription/plan-gating data model exists and is already enforced server-side, but there is no live payment processor behind it — `subscription_status`/`plan_tier` are not yet kept in sync by real billing events. Treating the current state as "billing is done" would be a planning error.
+- **Migration-history hygiene.** Several existing database migrations were used to insert and then clean up test/verification data rather than represent durable schema changes, and at least one migration file was left empty with an unedited default name. This is a process risk for schema auditability, not a current data-integrity risk, and should be cleaned up as part of ongoing governance (Phase 1B) rather than left to accumulate.
+
+---
+
+## Milestones
+
+- **M1 — Governance Baseline:** Repository audited, roadmap published, AI research fully documented. *(Target: end of Phase 1B.)*
+- **M2 — Core Booking Loop Live:** A professional can authenticate, manage a Beauty Passport, and run a full appointment lifecycle on real Supabase data. *(Target: end of Phase 5.)*
+- **M3 — Mobile Professional Workflow:** Route optimization is live for a professional's day of appointments. **(Met** — live-verified 2026-08-01 against real Mapbox APIs; see `docs/verification/PHASE_12_LIVE_VERIFICATION_REPORT.md`.**)** *(Target: end of Phase 9.)*
+- **M4 — AI Platform v1:** AI Assistant fully live (met); BR-FS-001 licensing gate cleared and a benchmarked baseline model exists. *(Target: end of Phase 10.)*
+- **M5 — Commerce-Ready:** Marketplace, real payments, and notifications are all live. *(Target: end of Phase 8.)*
+- **M6 — Production-Hardened:** Automated tests, a completed security review, and performance budgets are all in place. *(Target: end of Phase 13.)*
+- **M7 — Beta Complete:** A real professional cohort has used BeautyRoute in production conditions with critical issues resolved. *(Target: end of Phase 15.)*
+- **M8 — Production Launch:** BeautyRoute is generally available and commercially operating. *(Target: end of Phase 16.)*
+
+---
+
+## Change Log
+
+- **2026-08-01 — Phase 9 (Maps & Routing) marked Completed.** Live-verified the Route Engine end to end against real Mapbox APIs (geocoding, distance/duration matrix, directions) and the real Supabase backend, now that both `MAPBOX_SECRET_TOKEN` and `VITE_MAPBOX_PUBLIC_TOKEN` were configured. Verified: real geocoding, multi-stop routing, route optimization, schedule-conflict detection, manual rerouting, missing/unresolved-address handling, cancelled-appointment exclusion, cross-workspace and tamper protection, authentication and plan gating, timezone-aware date boundaries, start/end location geocoding, real map initialization, external navigation links, browser-bundle secret checks, and clean `oxlint`/`vite build` runs. Three real defects were found, fixed, and re-verified live: (1) low-confidence Mapbox geocoding matches were being accepted as correct — fixed with a relevance threshold; (2) the `reroute` tamper-check wrongly rejected legitimate reorders — fixed to validate a duplicate-free subset instead of an exact-length match; (3) day-boundary calculation ignored the workspace's timezone, which could misclassify appointments near midnight for non-UTC workspaces (e.g. the `Asia/Riyadh` test workspace) — fixed with a proper local-to-UTC boundary conversion. The `route_too_large` stop-count cap was verified by code review only, not a live 24+-stop request, and is documented as such rather than claimed as live-tested. Full record: `docs/verification/PHASE_12_LIVE_VERIFICATION_REPORT.md` (filed under "Phase 12," the external label used for this verification pass; internally this roadmap tracks the same work as Phase 9). All temporary verification data and diagnostic code were removed and confirmed gone; no application behavior outside the route-planner function and the day-boundary helper was changed.
