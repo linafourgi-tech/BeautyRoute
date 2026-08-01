@@ -2,7 +2,7 @@
 
 **Document type:** Internal project governance document. Planning and status tracking only — this file does not itself change, and is not evidence of a change to, any application code, database schema, or infrastructure.
 **Maintained by:** BeautyRoute Founding Team
-**Last updated:** 2026-08-01
+**Last updated:** 2026-08-02
 
 ---
 
@@ -219,6 +219,18 @@ BeautyRoute has a working frontend and backend foundation with core workspace, c
 
 ---
 
+## Future Product Ideas
+
+**Status:** None of the items below are implemented, scheduled, or assigned to a development phase above. They are early, unstructured product concepts carried over from initial product ideation, preserved here for future triage — not commitments, and not evidence of planned work.
+
+- **Beauty Journeys** — A curated, multi-visit experience concept (as opposed to a single one-off appointment), not yet scoped or specified.
+- **Favorites / Quick Rebooking** — Letting a client mark a professional, service, or past visit as a favorite and rebook it with minimal steps, not yet scoped or specified.
+- **Wedding Journey** — A specialized, occasion-specific booking/preparation flow for weddings, not yet scoped or specified.
+
+These originated from an early, informal product-ideas note (`src/docs/ROADMAP.md`, now removed — its content is preserved here in full).
+
+---
+
 ## Risks
 
 - **Mock/placeholder data in early development flows.** Some flows were validated using seeded or placeholder data during early Supabase integration; this must be fully retired before Beta Launch (Phase 15) to avoid conflating "looks correct with seed data" with "is correct under real usage."
@@ -245,4 +257,5 @@ BeautyRoute has a working frontend and backend foundation with core workspace, c
 
 ## Change Log
 
+- **2026-08-02 — Added "Future Product Ideas" section; removed obsolete `src/docs/ROADMAP.md`.** The three forward-looking concepts from that early, informal product-ideas note (Beauty Journeys, Favorites / Quick Rebooking, Wedding Journey) were preserved verbatim in a new "Future Product Ideas" section above, explicitly labeled as unimplemented, unscoped ideas rather than planned work. No development phase, milestone status, or phase numbering was changed by this update.
 - **2026-08-01 — Phase 9 (Maps & Routing) marked Completed.** Live-verified the Route Engine end to end against real Mapbox APIs (geocoding, distance/duration matrix, directions) and the real Supabase backend, now that both `MAPBOX_SECRET_TOKEN` and `VITE_MAPBOX_PUBLIC_TOKEN` were configured. Verified: real geocoding, multi-stop routing, route optimization, schedule-conflict detection, manual rerouting, missing/unresolved-address handling, cancelled-appointment exclusion, cross-workspace and tamper protection, authentication and plan gating, timezone-aware date boundaries, start/end location geocoding, real map initialization, external navigation links, browser-bundle secret checks, and clean `oxlint`/`vite build` runs. Three real defects were found, fixed, and re-verified live: (1) low-confidence Mapbox geocoding matches were being accepted as correct — fixed with a relevance threshold; (2) the `reroute` tamper-check wrongly rejected legitimate reorders — fixed to validate a duplicate-free subset instead of an exact-length match; (3) day-boundary calculation ignored the workspace's timezone, which could misclassify appointments near midnight for non-UTC workspaces (e.g. the `Asia/Riyadh` test workspace) — fixed with a proper local-to-UTC boundary conversion. The `route_too_large` stop-count cap was verified by code review only, not a live 24+-stop request, and is documented as such rather than claimed as live-tested. Full record: `docs/verification/PHASE_12_LIVE_VERIFICATION_REPORT.md` (filed under "Phase 12," the external label used for this verification pass; internally this roadmap tracks the same work as Phase 9). All temporary verification data and diagnostic code were removed and confirmed gone; no application behavior outside the route-planner function and the day-boundary helper was changed.
