@@ -1,0 +1,20 @@
+/* BeautyRoute design-system — namespaced entry stylesheet.
+ *
+ * This file didn't exist in the design-import handoff (the root styles.css
+ * that was supposed to @import the six token files was lost in the same
+ * download collision that scrambled everything else) — recreated here from
+ * handoff/INTEGRATION.md's description of what it should do.
+ *
+ * NOT imported anywhere in the app yet. When it is, every token below only
+ * takes effect inside an element carrying the `beautyroute-ds` class — see
+ * tokens/colors.css for why. This file is inert until:
+ *   1. something imports it, and
+ *   2. a component/page opts in with className="beautyroute-ds".
+ * src/index.css and its Tailwind @theme tokens are untouched either way.
+ */
+@import "./tokens/colors.css";
+@import "./tokens/typography.css";
+@import "./tokens/spacing.css";
+@import "./tokens/effects.css";
+@import "./tokens/fonts.css";
+@import "./tokens/rtl.css";

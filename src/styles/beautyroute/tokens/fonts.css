@@ -1,0 +1,7 @@
+/* BeautyRoute design-system tokens — fonts (Fraunces + Inter).
+   Namespaced under .beautyroute-ds — see colors.css for why. This is a
+   DIFFERENT font pair than src/index.css's --font-display/--font-body
+   (Playfair Display / Manrope). Namespacing prevents the two from colliding
+   on :root; the brand/rebrand decision is deliberately deferred. */
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap");
+.beautyroute-ds{--font-display:"Fraunces",ui-serif,Georgia,serif;--font-body:"Inter",ui-sans-serif,-apple-system,"SF Pro Display",system-ui,sans-serif}

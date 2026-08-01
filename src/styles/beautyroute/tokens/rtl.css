@@ -1,0 +1,9 @@
+/* BeautyRoute design-system tokens — RTL direction helpers.
+   Namespaced under .beautyroute-ds — see colors.css for why.
+   NOTE: the original handoff file targeted a bare `[dir="rtl"] body` selector,
+   which would have changed the real document body's font globally the moment
+   dir="rtl" appeared anywhere. Rewritten to target .beautyroute-ds itself so
+   it only ever affects opted-in subtrees, never the actual app body. */
+.beautyroute-ds{--dir-start:left;--dir-end:right;}
+.beautyroute-ds[dir="rtl"]{--dir-start:right;--dir-end:left;}
+.beautyroute-ds[dir="rtl"]{font-family:var(--font-body),"Noto Kufi Arabic",sans-serif}
