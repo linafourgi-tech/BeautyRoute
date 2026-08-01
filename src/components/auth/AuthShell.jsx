@@ -1,6 +1,6 @@
 import React from "react";
 
-// Ported from design-import/ui_kits/auth/AuthShell.jsx.
+// Ported from docs/design-reference/ui_kits/auth/AuthShell.jsx.
 // Changes from the source: `window.AuthShell = AuthShell` removed (real ES
 // export instead), `className: "beautyroute-ds"` added to the root so the
 // scoped tokens from src/styles/beautyroute actually apply to this subtree,
