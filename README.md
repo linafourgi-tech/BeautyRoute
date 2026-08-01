@@ -221,6 +221,9 @@ not a current data-integrity issue; see the Risks section of
   decision, literature review, architecture selection, model specification).
 - `docs/verification/` — live-verification reports against real external
   services (currently: Maps & Routing).
+- [`docs/operations/BUILD_NOTES.md`](docs/operations/BUILD_NOTES.md) —
+  current production build status, bundle-size warnings, and deferred
+  optimization ideas.
 - `docs/design-reference/` — historical design-tool export, retained for a
   future visual redesign; see its `NOTICE.md` for what it is and isn't.
 - `src/docs/` — in-app product/brand reference material (`FEATURES.md`,
@@ -248,8 +251,8 @@ not a current data-integrity issue; see the Risks section of
   not code meant to lint clean (see its `NOTICE.md`).
 - **Production build emits bundle-size warnings** (main bundle and the
   Mapbox GL chunk both exceed the default 500 kB advisory threshold) — see
-  `docs/operations/BUILD_NOTES.md` once added, or `docs/PROJECT_ROADMAP.md`
-  in the meantime.
+  [`docs/operations/BUILD_NOTES.md`](docs/operations/BUILD_NOTES.md) for the
+  full breakdown and deferred optimization ideas.
 
 ## 17. Current development status
 
