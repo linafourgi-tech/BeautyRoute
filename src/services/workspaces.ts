@@ -47,7 +47,36 @@ export async function updateWorkspace(id: string, updates: UpdateWorkspace) {
     .eq('id', id)
     .select()
     .single()
-  
+
+  if (error) throw error
+  return data
+}
+
+// 5. One-time onboarding bootstrap: creates the workspace, the caller's
+// workspace_staff membership, and a default workspace_settings row, and
+// starts the trial period. See bootstrap_professional_workspace() in
+// supabase/migrations/20260724130000_professional_onboarding.sql. Guarded
+// server-side to run at most once per profile. Returns the new workspace id.
+export async function bootstrapWorkspace(businessName: string, businessType: string, city: string) {
+  const { data, error } = await supabase.rpc('bootstrap_professional_workspace', {
+    p_business_name: businessName,
+    p_business_type: businessType,
+    p_city: city,
+  })
+
+  if (error) throw error
+  return data as string
+}
+
+// 6. Update a workspace's settings row (e.g. business_hours during onboarding)
+export async function updateWorkspaceSettings(workspaceId: string, updates: Record<string, unknown>) {
+  const { data, error } = await supabase
+    .from('workspace_settings')
+    .update(updates)
+    .eq('workspace_id', workspaceId)
+    .select()
+    .single()
+
   if (error) throw error
   return data
 }
