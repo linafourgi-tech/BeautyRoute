@@ -48,6 +48,17 @@ export async function deleteService(id: string) {
     .from('services')
     .delete()
     .eq('id', id)
-  
+
   if (error) throw error
+}
+
+// 5. Copy starter service_templates into a workspace's own services (onboarding)
+export async function importServiceTemplates(workspaceId: string, templateIds: string[]) {
+  const { data, error } = await supabase.rpc('import_service_templates', {
+    p_workspace_id: workspaceId,
+    p_template_ids: templateIds,
+  })
+
+  if (error) throw error
+  return data as number
 }

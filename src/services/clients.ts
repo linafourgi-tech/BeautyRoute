@@ -49,7 +49,20 @@ export async function updateClient(id: string, updates: UpdateClient) {
     .eq('id', id)
     .select()
     .single()
-  
+
   if (error) throw error
   return data
+}
+
+// 5. Remove a client. There's no archive/soft-delete column on this table --
+// clients.client_id has ON DELETE RESTRICT from appointments and visits, so
+// this throws if the client has any booking history. Callers should catch
+// that and explain it, not treat it as a generic failure.
+export async function deleteClient(id: string) {
+  const { error } = await supabase
+    .from('clients')
+    .delete()
+    .eq('id', id)
+
+  if (error) throw error
 }

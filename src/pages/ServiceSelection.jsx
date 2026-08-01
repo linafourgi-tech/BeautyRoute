@@ -42,7 +42,7 @@ export default function ServiceSelection() {
           return (
             <div
               key={service.id}
-              onClick={() => isActive && navigate("/import-services")}
+              onClick={() => isActive && navigate("/services")}
               style={{
                 backgroundColor: "#1e1e1e",
                 borderRadius: "12px",
