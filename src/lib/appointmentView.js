@@ -13,6 +13,10 @@ export function toAppointmentViewModel(row) {
   return {
     id: row.id,
     clientId: row.client_id,
+    // Raw service ids/durations attached to this appointment -- needed to
+    // prefill the edit form; `service` below stays a display string for the
+    // list view, unchanged for existing consumers.
+    serviceIds: (row.appointment_services ?? []).map((link) => link.services?.id).filter(Boolean),
     date,
     time,
     client: row.clients?.full_name ?? "Unknown client",
