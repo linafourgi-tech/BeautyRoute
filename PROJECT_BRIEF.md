@@ -1,4 +1,4 @@
-# SalmaRoute (BeautyOS) — Handoff Brief for the Dev
+# BeautyRoute — Handoff Brief for the Dev
 
 One page, no fluff. Full vision doc exists but you don't need to read it — this is
 everything actionable.

@@ -46,8 +46,7 @@ export default function Sidebar() {
           <Scissors size={18} className="text-onaccent" />
         </div>
         <div>
-          <p className="font-display text-xl leading-none tracking-tight text-ivory">SalmaRoute</p>
-          <p className="text-[11px] uppercase tracking-[0.16em] text-muted font-mono-tag mt-1.5">BeautyOS</p>
+          <p className="font-display text-xl leading-none tracking-tight text-ivory">BeautyRoute</p>
         </div>
       </div>
 
