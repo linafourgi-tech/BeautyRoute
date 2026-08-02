@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config'
+import { defineConfig, configDefaults } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
@@ -11,5 +11,11 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.js'],
     globals: true,
+    // supabase/functions/** are Deno Edge Function tests (Deno.test, Deno.env,
+    // https:// imports) run via `deno test`, not Vitest -- Vitest's default
+    // include glob would otherwise pick up these *.test.ts files too and
+    // fail trying to resolve Deno-only syntax under Node. Extends (not
+    // replaces) Vitest's own default excludes.
+    exclude: [...configDefaults.exclude, 'supabase/functions/**'],
   },
 })
