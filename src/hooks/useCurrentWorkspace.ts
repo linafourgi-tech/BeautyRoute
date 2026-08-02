@@ -1,4 +1,4 @@
-import { useWorkspaceContext } from '../contexts/WorkspaceContext'
+import { useWorkspaceContext } from '../contexts/useWorkspaceContext'
 
 // Phase 9: now backed by the shared WorkspaceContext instead of an
 // independent per-component fetch, so switching workspaces in the sidebar

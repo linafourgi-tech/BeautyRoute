@@ -11,7 +11,7 @@ const getAppointmentsMock = vi.fn();
 const getClientsMock = vi.fn();
 
 vi.mock("../hooks/useSession", () => ({ useSession: () => useSessionMock() }));
-vi.mock("../contexts/WorkspaceContext", () => ({ useWorkspaceContext: () => useWorkspaceContextMock() }));
+vi.mock("../contexts/useWorkspaceContext", () => ({ useWorkspaceContext: () => useWorkspaceContextMock() }));
 vi.mock("../hooks/useCurrentWorkspace", () => ({ useCurrentWorkspace: () => useCurrentWorkspaceMock() }));
 vi.mock("../hooks/useSubscription", () => ({ useSubscription: () => useSubscriptionMock() }));
 vi.mock("../services/appointments", () => ({ getAppointments: (...a) => getAppointmentsMock(...a) }));

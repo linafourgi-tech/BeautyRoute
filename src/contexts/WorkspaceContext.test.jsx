@@ -15,7 +15,8 @@ vi.mock("../lib/supabase", () => ({
   },
 }));
 
-import { WorkspaceProvider, useWorkspaceContext } from "./WorkspaceContext";
+import { WorkspaceProvider } from "./WorkspaceContext";
+import { useWorkspaceContext } from "./useWorkspaceContext";
 import { useCurrentWorkspace } from "../hooks/useCurrentWorkspace";
 
 function wrapper({ children }) {

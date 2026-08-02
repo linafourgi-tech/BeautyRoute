@@ -13,7 +13,7 @@ import {
   ListChecks,
 } from "lucide-react";
 import { useSession } from "../hooks/useSession";
-import { useWorkspaceContext } from "../contexts/WorkspaceContext";
+import { useWorkspaceContext } from "../contexts/useWorkspaceContext";
 
 const nav = [
   // Was "/" (the Platform Service Hub / ServiceSelection page) -- that

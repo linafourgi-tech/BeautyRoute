@@ -1,7 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { Database } from '../lib/supabase-types'
 
-type Workspace = Database['public']['Tables']['workspaces']['Row']
 type InsertWorkspace = Database['public']['Tables']['workspaces']['Insert']
 type UpdateWorkspace = Database['public']['Tables']['workspaces']['Update']
 

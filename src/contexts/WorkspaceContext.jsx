@@ -1,9 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getWorkspaces } from "../services/workspaces";
 import { supabase } from "../lib/supabase";
+import { WorkspaceContext } from "./useWorkspaceContext";
 
 const STORAGE_KEY = "br.selectedWorkspaceId";
-const WorkspaceContext = createContext(null);
 
 function readStoredId() {
   try {
@@ -100,8 +100,6 @@ export function WorkspaceProvider({ children }) {
   );
 }
 
-export function useWorkspaceContext() {
-  const ctx = useContext(WorkspaceContext);
-  if (!ctx) throw new Error("useWorkspaceContext must be used within a WorkspaceProvider");
-  return ctx;
-}
+// useWorkspaceContext lives in ./useWorkspaceContext.js -- see that file for
+// why (fast-refresh: a file exporting a component must not also export a
+// hook function).

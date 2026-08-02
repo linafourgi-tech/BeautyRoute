@@ -1,7 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { Database } from '../lib/supabase-types'
 
-type Service = Database['public']['Tables']['services']['Row']
 type InsertService = Database['public']['Tables']['services']['Insert']
 type UpdateService = Database['public']['Tables']['services']['Update']
 

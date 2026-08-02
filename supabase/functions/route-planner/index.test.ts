@@ -205,7 +205,7 @@ Deno.test("secret Mapbox token never reaches the response body, even though it's
 Deno.test("cancelled appointments are excluded at the query level -- the appointments request filters to pending/confirmed only", async () => {
   let capturedUrl = "";
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+  globalThis.fetch = (async (input: string | URL | Request, _init?: RequestInit) => {
     const url = input instanceof Request ? input.url : input.toString();
     if (url.includes("/auth/v1/user")) return authUserResponse("user-cancelled-check");
     if (url.includes("/rest/v1/workspaces")) return jsonRes([workspaceRow()]);
@@ -228,7 +228,7 @@ Deno.test("cancelled appointments are excluded at the query level -- the appoint
 Deno.test("timezone-aware date boundaries: a workspace in Asia/Riyadh (UTC+3) queries local-midnight-to-local-midnight, not UTC midnight", async () => {
   let capturedUrl = "";
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+  globalThis.fetch = (async (input: string | URL | Request, _init?: RequestInit) => {
     const url = input instanceof Request ? input.url : input.toString();
     if (url.includes("/auth/v1/user")) return authUserResponse("user-tz-check");
     if (url.includes("/rest/v1/workspaces")) return jsonRes([workspaceRow({ timezone: "Asia/Riyadh" })]);

@@ -1,7 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { Database } from '../lib/supabase-types'
 
-type Appointment = Database['public']['Tables']['appointments']['Row']
 type InsertAppointment = Database['public']['Tables']['appointments']['Insert']
 type UpdateAppointment = Database['public']['Tables']['appointments']['Update']
 
