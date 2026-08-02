@@ -1,4 +1,4 @@
-# BeautyRoute — Claude Code Handoff Package
+# BeautyRoute — AI-Assisted Development Handoff Package
 
 This is the complete BeautyRoute design system, packaged for migration into the
 existing **BeautyRoute React/Vite application**. The entire project folder *is*
@@ -24,7 +24,7 @@ BeautyRoute design is preserved exactly.
 | `handoff/INTEGRATION.md` | **Start here** — setup, dependencies, folder mapping, fonts, guardrails. |
 | `handoff/LOCALIZATION-STATUS.md` | Completed vs. incomplete localization surfaces. |
 
-## For Claude Code
+## For the development assistant
 
 Read `handoff/INTEGRATION.md` first. It tells you how to compare this package
 with the existing `src/` structure and integrate the design **without touching**

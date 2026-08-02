@@ -1,8 +1,8 @@
 # Integration guide — BeautyRoute design → existing React/Vite app
 
-This guide is written for **Claude Code** working inside the real BeautyRoute
-application. Your job is to migrate the design in this package into the app's
-existing `src/` structure **without replacing infrastructure**.
+This guide is written for the development assistant working inside the real
+BeautyRoute application. Your job is to migrate the design in this package
+into the app's existing `src/` structure **without replacing infrastructure**.
 
 ---
 

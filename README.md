@@ -14,7 +14,7 @@ description of the finished product.
 - Account creation, sign-in, and a guided onboarding flow.
 - A per-client "Beauty Passport": profile, history, and notes.
 - Appointment scheduling against live data.
-- A Claude-powered AI Assistant (client summaries, next-visit suggestions,
+- An LLM-powered AI Assistant (client summaries, next-visit suggestions,
   aftercare guidance, workspace chat) — a live, gated application feature.
 - Server-computed, optimized daily routes between appointments using Mapbox.
 - Subscription/plan-tier gating (feature access), enforced both client-side
