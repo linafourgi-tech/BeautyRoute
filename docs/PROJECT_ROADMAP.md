@@ -155,8 +155,8 @@ BeautyRoute has a working frontend and backend foundation with core workspace, c
 
 - **Objective:** Introduce automated test coverage before the codebase grows further, given that zero automated tests currently exist anywhere in the repository.
 - **Main Deliverables:** Test runner/framework selection and setup; unit tests for business-critical logic (plan gating, RLS-adjacent authorization checks, route optimization); integration tests for Edge Functions; a CI gate that runs tests on every change.
-- **Status:** Planned
-- **Definition of Done:** Core business logic (subscription/plan gating, authentication/authorization boundaries, appointment scheduling logic) has automated test coverage, and CI fails the build on a broken test.
+- **Status:** Completed
+- **Definition of Done:** Core business logic (subscription/plan gating, authentication/authorization boundaries, appointment scheduling logic) has automated test coverage, and CI fails the build on a broken test. **Met** — 244 Vitest tests (frontend) + 43 Deno tests (Edge Functions and shared plan rules) cover plan gating, authentication/route guards, workspace context, and the appointment/client/service/Beauty Passport domain pages; `.github/workflows/ci.yml` runs lint, tests, coverage, and build on every push/PR, confirmed green on a real GitHub Actions run. Full record: `docs/testing/TEST_STRATEGY.md` (the original plan) and `docs/testing/PHASE_15_FINAL_REPORT.md` (final summary of what was actually built and verified). Not yet covered: Supabase-local-dev/RLS integration tests and end-to-end tests, both explicitly documented as deferred rather than claimed.
 - **Dependencies:** Phases 2–9 (tests need real features to test).
 - **Priority:** Critical
 - **Estimated Complexity:** Large
@@ -235,7 +235,7 @@ These originated from an early, informal product-ideas note (`src/docs/ROADMAP.m
 
 - **Mock/placeholder data in early development flows.** Some flows were validated using seeded or placeholder data during early Supabase integration; this must be fully retired before Beta Launch (Phase 15) to avoid conflating "looks correct with seed data" with "is correct under real usage."
 - **Dataset licensing (BR-FS-001).** The face-shape classifier's underlying training data is not cleared for use — status is **REQUIRES LICENSE REVIEW** per `docs/ai/FACE_SHAPE_DECISION.md`. This blocks all BR-FS-001 implementation work and has no committed resolution date; it depends on external parties (dataset creators/authors) responding to outreach.
-- **No automated tests exist anywhere in the repository today.** Every feature currently shipped (auth, appointments, AI Assistant, routing) relies on manual verification only. This is an accepted, explicit risk until Phase 11 is completed, and it grows more expensive to close the longer it's deferred.
+- **Automated test coverage exists but is not exhaustive.** Phase 11 (Testing) is complete — 244 Vitest tests and 43 Deno tests now cover plan gating, auth/route guards, and the core domain pages, enforced in CI. What remains genuinely untested: RLS policy enforcement itself (only the application-code authorization logic alongside it is tested — no Supabase-local-dev/Postgres integration tier exists yet), and end-to-end user flows. See `docs/testing/PHASE_15_FINAL_REPORT.md` for the full breakdown of what is and isn't covered.
 - **Future commercial licensing exposure.** Two dependencies carry licensing terms that need active tracking as the project moves from graduation project to commercial product: Mapbox GL JS (proprietary license since v2, usage-based account terms) and the eventual BR-FS-001 training dataset (pending Phase 10's licensing resolution). Neither is a defect today, but both require ongoing diligence rather than a one-time check.
 - **Payments are not yet real.** The subscription/plan-gating data model exists and is already enforced server-side, but there is no live payment processor behind it — `subscription_status`/`plan_tier` are not yet kept in sync by real billing events. Treating the current state as "billing is done" would be a planning error.
 - **Migration-history hygiene.** Several existing database migrations were used to insert and then clean up test/verification data rather than represent durable schema changes, and at least one migration file was left empty with an unedited default name. This is a process risk for schema auditability, not a current data-integrity risk, and should be cleaned up as part of ongoing governance (Phase 1B) rather than left to accumulate.
@@ -249,7 +249,7 @@ These originated from an early, informal product-ideas note (`src/docs/ROADMAP.m
 - **M3 — Mobile Professional Workflow:** Route optimization is live for a professional's day of appointments. **(Met** — live-verified 2026-08-01 against real Mapbox APIs; see `docs/verification/PHASE_12_LIVE_VERIFICATION_REPORT.md`.**)** *(Target: end of Phase 9.)*
 - **M4 — AI Platform v1:** AI Assistant fully live (met); BR-FS-001 licensing gate cleared and a benchmarked baseline model exists. *(Target: end of Phase 10.)*
 - **M5 — Commerce-Ready:** Marketplace, real payments, and notifications are all live. *(Target: end of Phase 8.)*
-- **M6 — Production-Hardened:** Automated tests, a completed security review, and performance budgets are all in place. *(Target: end of Phase 13.)*
+- **M6 — Production-Hardened:** Automated tests, a completed security review, and performance budgets are all in place. **(Partially met** — automated tests are done (Phase 11, see `docs/testing/PHASE_15_FINAL_REPORT.md`); the security review (Phase 12) and performance budgets (Phase 13) are still Planned, so this milestone as a whole is not yet met.**)** *(Target: end of Phase 13.)*
 - **M7 — Beta Complete:** A real professional cohort has used BeautyRoute in production conditions with critical issues resolved. *(Target: end of Phase 15.)*
 - **M8 — Production Launch:** BeautyRoute is generally available and commercially operating. *(Target: end of Phase 16.)*
 
@@ -257,5 +257,26 @@ These originated from an early, informal product-ideas note (`src/docs/ROADMAP.m
 
 ## Change Log
 
+- **2026-08-02 — Phase 11 (Testing) marked Completed.** Built an automated
+  test foundation across 9 steps (externally labeled "Phase 15" during that
+  work — unrelated to this roadmap's own Phase 15, Beta Launch, and to the
+  earlier "Phase 12"/Phase 9 labeling note below): Vitest + React Testing
+  Library for the frontend (244 tests across 31 files) and Deno tests for
+  both Edge Functions plus the shared plan-rules module (43 tests),
+  covering plan gating, authentication/route guards, workspace context,
+  and the client/service/appointment/Beauty Passport domain pages, plus a
+  GitHub Actions CI workflow confirmed green on a real run. Three real,
+  independent production issues were found and explicitly left unfixed
+  (reported, not silently patched) pending separate approval: an
+  accessibility-naming issue in `Appointments.jsx`'s Services field,
+  hardcoded (non-real-data) revenue/rating figures in
+  `StylistDashboard.jsx`, and a native-vs-custom email-validation UX
+  inconsistency in `Login.jsx`. Explicitly not yet covered: Supabase-
+  local-dev/RLS integration tests (RLS policies themselves are not yet
+  exercised by an automated test against a real Postgres instance) and
+  end-to-end tests — both documented as deferred, not claimed. Full
+  record: `docs/testing/TEST_STRATEGY.md` and
+  `docs/testing/PHASE_15_FINAL_REPORT.md`. No application behavior,
+  routing, Edge Function logic, or migrations were changed by this work.
 - **2026-08-02 — Added "Future Product Ideas" section; removed obsolete `src/docs/ROADMAP.md`.** The three forward-looking concepts from that early, informal product-ideas note (Beauty Journeys, Favorites / Quick Rebooking, Wedding Journey) were preserved verbatim in a new "Future Product Ideas" section above, explicitly labeled as unimplemented, unscoped ideas rather than planned work. No development phase, milestone status, or phase numbering was changed by this update.
 - **2026-08-01 — Phase 9 (Maps & Routing) marked Completed.** Live-verified the Route Engine end to end against real Mapbox APIs (geocoding, distance/duration matrix, directions) and the real Supabase backend, now that both `MAPBOX_SECRET_TOKEN` and `VITE_MAPBOX_PUBLIC_TOKEN` were configured. Verified: real geocoding, multi-stop routing, route optimization, schedule-conflict detection, manual rerouting, missing/unresolved-address handling, cancelled-appointment exclusion, cross-workspace and tamper protection, authentication and plan gating, timezone-aware date boundaries, start/end location geocoding, real map initialization, external navigation links, browser-bundle secret checks, and clean `oxlint`/`vite build` runs. Three real defects were found, fixed, and re-verified live: (1) low-confidence Mapbox geocoding matches were being accepted as correct — fixed with a relevance threshold; (2) the `reroute` tamper-check wrongly rejected legitimate reorders — fixed to validate a duplicate-free subset instead of an exact-length match; (3) day-boundary calculation ignored the workspace's timezone, which could misclassify appointments near midnight for non-UTC workspaces (e.g. the `Asia/Riyadh` test workspace) — fixed with a proper local-to-UTC boundary conversion. The `route_too_large` stop-count cap was verified by code review only, not a live 24+-stop request, and is documented as such rather than claimed as live-tested. Full record: `docs/verification/PHASE_12_LIVE_VERIFICATION_REPORT.md` (filed under "Phase 12," the external label used for this verification pass; internally this roadmap tracks the same work as Phase 9). All temporary verification data and diagnostic code were removed and confirmed gone; no application behavior outside the route-planner function and the day-boundary helper was changed.
