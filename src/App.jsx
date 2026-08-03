@@ -12,6 +12,8 @@ import Clients from "./pages/Clients";
 import Services from "./pages/Services";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Onboarding from "./pages/Onboarding";
 import Pricing from "./pages/Pricing";
 import { ProtectedRoute } from "./components/routing/ProtectedRoute";
@@ -46,6 +48,8 @@ export default function App() {
           {/* Public */}
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/pricing" element={<Pricing />} />
 
           {/* Its own guard: signed in + NOT yet onboarded */}

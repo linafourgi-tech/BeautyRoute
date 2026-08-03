@@ -25,6 +25,7 @@ function renderLogin() {
         <Route path="/dashboard" element={<div>Dashboard page</div>} />
         <Route path="/onboarding" element={<div>Onboarding page</div>} />
         <Route path="/signup" element={<div>Signup page</div>} />
+        <Route path="/forgot-password" element={<div>Forgot password page</div>} />
       </Routes>
     </MemoryRouter>
   );
@@ -42,6 +43,13 @@ describe("Login page", () => {
     expect(screen.getByLabelText("Email")).toBeInTheDocument();
     expect(screen.getByLabelText("Password")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
+  });
+
+  it("links to the forgot-password flow", async () => {
+    const user = userEvent.setup();
+    renderLogin();
+    await user.click(screen.getByRole("link", { name: "Forgot password?" }));
+    expect(await screen.findByText("Forgot password page")).toBeInTheDocument();
   });
 
   it("shows validation errors and does not call signInUser when submitted empty", async () => {
