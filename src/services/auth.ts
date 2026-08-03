@@ -1,9 +1,10 @@
 import { supabase } from '../lib/supabase'
+import { normalizeEmail } from '../lib/validation'
 
 // 1. Sign up a new user (Salon owner / Manager)
 export async function signUpUser(email: string, password: string, metadata: Record<string, unknown> = {}) {
   const { data, error } = await supabase.auth.signUp({
-    email,
+    email: normalizeEmail(email),
     password,
     options: { data: metadata },
   })
@@ -15,10 +16,10 @@ export async function signUpUser(email: string, password: string, metadata: Reco
 // 2. Log in an existing user
 export async function signInUser(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({
-    email,
+    email: normalizeEmail(email),
     password,
   })
-  
+
   if (error) throw error
   return data
 }
@@ -41,7 +42,7 @@ export async function getCurrentUser() {
 // response for an unknown email), so callers must never branch on the
 // result -- always show the same generic confirmation regardless.
 export async function requestPasswordReset(email: string) {
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+  const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmail(email), {
     redirectTo: `${window.location.origin}/reset-password`,
   })
   if (error) throw error
