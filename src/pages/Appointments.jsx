@@ -362,7 +362,7 @@ export default function Appointments() {
                 </Field>
               </div>
 
-              <Field label="Services">
+              <FieldGroup label="Services">
                 <div className="flex flex-wrap gap-2">
                   {services.length === 0 && <p className="text-xs text-muted">No active services yet.</p>}
                   {services.map((s) => (
@@ -370,6 +370,7 @@ export default function Appointments() {
                       type="button"
                       key={s.id}
                       onClick={() => toggleService(s.id)}
+                      aria-pressed={form.serviceIds.includes(s.id)}
                       className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
                         form.serviceIds.includes(s.id)
                           ? "bg-wine border-wine text-onaccent"
@@ -380,7 +381,7 @@ export default function Appointments() {
                     </button>
                   ))}
                 </div>
-              </Field>
+              </FieldGroup>
 
               <Field label="Status">
                 <select
@@ -454,6 +455,23 @@ function Field({ label, error, children }) {
       {children}
       {error && <span className="block text-xs text-danger mt-1">{error}</span>}
     </label>
+  );
+}
+
+// For a group of MULTIPLE independent controls (e.g. the Services toggle
+// buttons) -- a single wrapping <label>, as Field uses above, gives every
+// control inside it the same accessible name (the field's own label text),
+// which is correct for exactly one control but wrong for several. <fieldset>
+// + <legend> is the native HTML pattern for "one label for a group of
+// controls": the group as a whole is announced via the legend, while each
+// control inside keeps its own accessible name from its own content.
+function FieldGroup({ label, error, children }) {
+  return (
+    <fieldset className="block border-0 p-0 m-0 min-w-0">
+      <legend className="block w-full p-0 text-xs text-muted mb-1.5">{label}</legend>
+      {children}
+      {error && <span className="block text-xs text-danger mt-1">{error}</span>}
+    </fieldset>
   );
 }
 

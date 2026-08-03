@@ -125,15 +125,14 @@ describe("Appointments page", () => {
     // contains the text "Haircut" -- scope the query to the modal form so it
     // can't match the wrong element.
     const form = modalHeading.closest("form");
-    // NOTE (accessibility bug, reported not fixed -- see Step 5 report): the
-    // Services <Field> wraps every service button inside one shared <label>,
-    // so testing-library's accessible-name computation reports every one of
-    // them as named "Services" (the field label), not their own text. Query
-    // by rendered text content instead of role/name to route around it.
-    const serviceChip = within(form).getByText("Haircut · 45min");
+    // Each service button now has its own real accessible name (fixed via
+    // fieldset/legend -- see the regression test below), so it can be found
+    // by role/name like any other button.
+    const serviceChip = within(form).getByRole("button", { name: "Haircut · 45min" });
     // The service Haircut (s1, from serviceIds) should render as selected --
-    // selection is style-driven (bg-wine class), assert via class name.
+    // conveyed both visually (bg-wine class) and to assistive tech (aria-pressed).
     expect(serviceChip.className).toContain("bg-wine");
+    expect(serviceChip).toHaveAttribute("aria-pressed", "true");
   });
 
   it("creates a new appointment and links the selected services via setAppointmentServices", async () => {
@@ -148,16 +147,55 @@ describe("Appointments page", () => {
     await screen.findByRole("heading", { name: "New booking" });
 
     await user.selectOptions(screen.getByRole("combobox", { name: "Client" }), "c1");
-    // See the accessibility-bug note in the "prefills" test above -- query by
-    // text content, not role/name, since every service button is currently
-    // mislabeled "Services" by its enclosing <label>.
-    await user.click(screen.getByText("Haircut · 45min"));
+    await user.click(screen.getByRole("button", { name: "Haircut · 45min" }));
     await user.click(screen.getByRole("button", { name: "Book appointment" }));
 
     await waitFor(() => expect(createAppointmentMock).toHaveBeenCalledWith(
       expect.objectContaining({ workspace_id: "ws-1", client_id: "c1", status: "pending" })
     ));
     expect(setAppointmentServicesMock).toHaveBeenCalledWith("new-appt-1", ["s1"]);
+  });
+
+  it("REGRESSION (accessibility, fixed): each service control has its own distinct accessible name, not all named 'Services'", async () => {
+    getAppointmentsMock.mockResolvedValue([]);
+    getServicesMock.mockResolvedValue([
+      { id: "s1", name: "Haircut", duration_minutes: 45, is_active: true },
+      { id: "s2", name: "Blowout", duration_minutes: 30, is_active: true },
+      { id: "s3", name: "Color", duration_minutes: 90, is_active: true },
+    ]);
+    const user = userEvent.setup();
+    renderAppointments();
+    await screen.findByText("Nothing booked yet");
+
+    await user.click(screen.getByRole("button", { name: "New booking" }));
+    await screen.findByRole("heading", { name: "New booking" });
+
+    // The old defect: Field wrapped every service button in one shared
+    // <label>, so every button's accessible name resolved to "Services"
+    // (the field's own label), making them indistinguishable to a screen
+    // reader. Each button below must now be independently findable by its
+    // own real accessible name.
+    const haircut = screen.getByRole("button", { name: "Haircut · 45min" });
+    const blowout = screen.getByRole("button", { name: "Blowout · 30min" });
+    const color = screen.getByRole("button", { name: "Color · 90min" });
+    expect(haircut).toBeInTheDocument();
+    expect(blowout).toBeInTheDocument();
+    expect(color).toBeInTheDocument();
+
+    // None of them should be named "Services" -- that name now belongs only
+    // to the group as a whole (the fieldset/legend), not to any individual button.
+    expect(screen.queryByRole("button", { name: "Services" })).not.toBeInTheDocument();
+
+    // The group itself is still correctly labeled "Services" via a native
+    // fieldset/legend, exposed as an accessible group -- this is what keeps
+    // the field's own label meaningfully associated at the group level.
+    expect(screen.getByRole("group", { name: "Services" })).toBeInTheDocument();
+
+    // Each button toggles independently and reflects its own pressed state.
+    await user.click(blowout);
+    expect(blowout).toHaveAttribute("aria-pressed", "true");
+    expect(haircut).toHaveAttribute("aria-pressed", "false");
+    expect(color).toHaveAttribute("aria-pressed", "false");
   });
 
   it("requires a client, date, and time before booking", async () => {
