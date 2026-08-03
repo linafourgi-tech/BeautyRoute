@@ -82,7 +82,8 @@ ALTER TYPE "public"."user_role" OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."audit_trigger"() RETURNS "trigger"
-    LANGUAGE "plpgsql"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
     AS $$
 BEGIN
 
@@ -162,6 +163,45 @@ $$;
 ALTER FUNCTION "public"."audit_trigger"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."bootstrap_professional_workspace"("p_business_name" "text", "p_business_type" "text", "p_city" "text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+  v_workspace_id uuid;
+  v_slug text;
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.workspace_staff WHERE profile_id = auth.uid()) THEN
+    RAISE EXCEPTION 'Onboarding already completed for this user';
+  END IF;
+
+  v_slug := lower(regexp_replace(p_business_name, '[^a-zA-Z0-9]+', '-', 'g'))
+            || '-' || substr(md5(random()::text), 1, 6);
+
+  INSERT INTO public.workspaces
+    (owner_id, name, slug, display_brand, city, business_type,
+     subscription_status, trial_started_at, trial_ends_at)
+  VALUES
+    (auth.uid(), p_business_name, v_slug, p_business_name, p_city, p_business_type,
+     'trial', now(), now() + interval '7 days')
+  RETURNING id INTO v_workspace_id;
+
+  INSERT INTO public.workspace_staff (workspace_id, profile_id, is_active)
+  VALUES (v_workspace_id, auth.uid(), true);
+
+  INSERT INTO public.workspace_settings (workspace_id)
+  VALUES (v_workspace_id);
+
+  UPDATE public.profiles SET onboarding_completed = true WHERE id = auth.uid();
+
+  RETURN v_workspace_id;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."bootstrap_professional_workspace"("p_business_name" "text", "p_business_type" "text", "p_city" "text") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."handle_new_user"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -236,7 +276,8 @@ ALTER FUNCTION "public"."import_service_templates"("p_workspace_id" "uuid", "p_t
 
 
 CREATE OR REPLACE FUNCTION "public"."is_workspace_member"("workspace" "uuid") RETURNS boolean
-    LANGUAGE "sql" STABLE
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
     AS $$
 SELECT EXISTS (
     SELECT 1
@@ -456,7 +497,8 @@ CREATE TABLE IF NOT EXISTS "public"."profiles" (
     "avatar_url" "text",
     "role" "public"."user_role" DEFAULT 'owner'::"public"."user_role" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "onboarding_completed" boolean DEFAULT false NOT NULL
 );
 
 
@@ -594,7 +636,13 @@ CREATE TABLE IF NOT EXISTS "public"."workspaces" (
     "city" "text",
     "district" "text",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "business_type" "text",
+    "trial_started_at" timestamp with time zone,
+    "trial_ends_at" timestamp with time zone,
+    "subscription_status" "text" DEFAULT 'trial'::"text" NOT NULL,
+    CONSTRAINT "workspaces_business_type_check" CHECK (("business_type" = ANY (ARRAY['freelancer'::"text", 'salon'::"text"]))),
+    CONSTRAINT "workspaces_subscription_status_check" CHECK (("subscription_status" = ANY (ARRAY['trial'::"text", 'active'::"text", 'past_due'::"text", 'cancelled'::"text", 'expired'::"text"])))
 );
 
 
@@ -951,6 +999,12 @@ CREATE POLICY "ai_history_access" ON "public"."ai_history" USING ("public"."is_w
 ALTER TABLE "public"."appointment_services" ENABLE ROW LEVEL SECURITY;
 
 
+CREATE POLICY "appointment_services_access" ON "public"."appointment_services" USING ((EXISTS ( SELECT 1
+   FROM "public"."appointments" "a"
+  WHERE (("a"."id" = "appointment_services"."appointment_id") AND "public"."is_workspace_member"("a"."workspace_id")))));
+
+
+
 ALTER TABLE "public"."appointments" ENABLE ROW LEVEL SECURITY;
 
 
@@ -966,6 +1020,12 @@ CREATE POLICY "audit_logs_access" ON "public"."audit_logs" FOR SELECT USING ("pu
 
 
 ALTER TABLE "public"."client_tags" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "client_tags_access" ON "public"."client_tags" USING ((EXISTS ( SELECT 1
+   FROM "public"."clients" "c"
+  WHERE (("c"."id" = "client_tags"."client_id") AND "public"."is_workspace_member"("c"."workspace_id")))));
+
 
 
 ALTER TABLE "public"."clients" ENABLE ROW LEVEL SECURITY;
@@ -1007,6 +1067,10 @@ CREATE POLICY "revenues_access" ON "public"."revenues" USING ("public"."is_works
 
 
 ALTER TABLE "public"."service_templates" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "service_templates_read" ON "public"."service_templates" FOR SELECT USING (true);
+
 
 
 ALTER TABLE "public"."services" ENABLE ROW LEVEL SECURITY;
@@ -1061,6 +1125,12 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 GRANT ALL ON FUNCTION "public"."audit_trigger"() TO "anon";
 GRANT ALL ON FUNCTION "public"."audit_trigger"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."audit_trigger"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."bootstrap_professional_workspace"("p_business_name" "text", "p_business_type" "text", "p_city" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."bootstrap_professional_workspace"("p_business_name" "text", "p_business_type" "text", "p_city" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."bootstrap_professional_workspace"("p_business_name" "text", "p_business_type" "text", "p_city" "text") TO "service_role";
 
 
 
