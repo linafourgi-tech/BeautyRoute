@@ -202,6 +202,76 @@ $$;
 ALTER FUNCTION "public"."bootstrap_professional_workspace"("p_business_name" "text", "p_business_type" "text", "p_city" "text") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."delete_workspace"("p_workspace_id" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+BEGIN
+  -- Only the workspace's owner may delete the entire workspace -- a much
+  -- narrower authorization boundary than is_workspace_member(), which would
+  -- let any active staff member destroy the whole business's data.
+  IF NOT EXISTS (
+    SELECT 1 FROM public.workspaces
+    WHERE id = p_workspace_id AND owner_id = auth.uid()
+  ) THEN
+    RAISE EXCEPTION 'Only the workspace owner can delete this workspace'
+      USING ERRCODE = '42501';
+  END IF;
+
+  -- Join tables / leaves first -- nothing else depends on these, and
+  -- deleting them explicitly here (rather than relying on their own
+  -- ON DELETE CASCADE) keeps every step in this function independently
+  -- documented instead of leaning on cross-table cascade ordering again.
+  DELETE FROM public.appointment_services
+    WHERE appointment_id IN (SELECT id FROM public.appointments WHERE workspace_id = p_workspace_id);
+  DELETE FROM public.client_tags
+    WHERE client_id IN (SELECT id FROM public.clients WHERE workspace_id = p_workspace_id);
+  DELETE FROM public.revenues WHERE workspace_id = p_workspace_id;
+  DELETE FROM public.ai_history WHERE workspace_id = p_workspace_id;
+  DELETE FROM public.expenses WHERE workspace_id = p_workspace_id;
+  DELETE FROM public.notifications WHERE workspace_id = p_workspace_id;
+
+  -- appointments and visits MUST be deleted before clients: both carry
+  -- ON DELETE RESTRICT against clients.id, so clients cannot be removed
+  -- while either still references it. Deleting them here -- while the
+  -- workspaces row still exists -- also means their AFTER DELETE audit
+  -- triggers' INSERT INTO audit_logs succeeds normally, since audit_logs'
+  -- own FK to workspaces(id) still has a live row to point at.
+  DELETE FROM public.appointments WHERE workspace_id = p_workspace_id;
+  DELETE FROM public.visits WHERE workspace_id = p_workspace_id;
+
+  -- services next: appointment_services.service_id is ON DELETE RESTRICT,
+  -- but every appointment_services row for this workspace was already
+  -- removed in the first step above, so this is now safe.
+  DELETE FROM public.services WHERE workspace_id = p_workspace_id;
+
+  -- clients: every RESTRICTing dependent (appointments, visits) and every
+  -- dependent this function orders deliberately (client_tags, ai_history)
+  -- are already gone.
+  DELETE FROM public.clients WHERE workspace_id = p_workspace_id;
+
+  DELETE FROM public.tags WHERE workspace_id = p_workspace_id;
+  DELETE FROM public.files WHERE workspace_id = p_workspace_id;
+  DELETE FROM public.workspace_settings WHERE workspace_id = p_workspace_id;
+  DELETE FROM public.workspace_staff WHERE workspace_id = p_workspace_id;
+
+  -- Detach (not delete) this workspace's audit history -- preserves the
+  -- forensic record of everything that happened, including the deletes
+  -- just performed above, rather than losing it to workspaces' own
+  -- ON DELETE CASCADE on audit_logs.workspace_id when the final delete
+  -- below runs. workspace_id on audit_logs has always been nullable.
+  UPDATE public.audit_logs SET workspace_id = NULL WHERE workspace_id = p_workspace_id;
+
+  -- Last: nothing references this row anymore, so this is now a plain,
+  -- single-row delete with no cascade side effects left to worry about.
+  DELETE FROM public.workspaces WHERE id = p_workspace_id;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."delete_workspace"("p_workspace_id" "uuid") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."handle_new_user"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -1131,6 +1201,12 @@ GRANT ALL ON FUNCTION "public"."audit_trigger"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."bootstrap_professional_workspace"("p_business_name" "text", "p_business_type" "text", "p_city" "text") TO "anon";
 GRANT ALL ON FUNCTION "public"."bootstrap_professional_workspace"("p_business_name" "text", "p_business_type" "text", "p_city" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."bootstrap_professional_workspace"("p_business_name" "text", "p_business_type" "text", "p_city" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."delete_workspace"("p_workspace_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."delete_workspace"("p_workspace_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."delete_workspace"("p_workspace_id" "uuid") TO "service_role";
 
 
 

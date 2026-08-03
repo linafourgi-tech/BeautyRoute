@@ -67,7 +67,18 @@ export async function bootstrapWorkspace(businessName: string, businessType: str
   return data as string
 }
 
-// 6. Update a workspace's settings row (e.g. business_hours during onboarding)
+// 6. Permanently delete a workspace and everything scoped to it, in a
+// single safe, ordered, auditable operation. See delete_workspace() in
+// supabase/migrations/20260803120000_safe_workspace_deletion.sql -- the
+// database function enforces that only the workspace's owner can call this
+// successfully (any other caller, or a stale/non-owner session, gets a
+// thrown error and no rows are touched).
+export async function deleteWorkspace(workspaceId: string) {
+  const { error } = await supabase.rpc('delete_workspace', { p_workspace_id: workspaceId })
+  if (error) throw error
+}
+
+// 7. Update a workspace's settings row (e.g. business_hours during onboarding)
 export async function updateWorkspaceSettings(workspaceId: string, updates: Record<string, unknown>) {
   const { data, error } = await supabase
     .from('workspace_settings')
