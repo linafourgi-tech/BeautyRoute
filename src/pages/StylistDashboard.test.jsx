@@ -9,6 +9,7 @@ const useCurrentWorkspaceMock = vi.fn();
 const useSubscriptionMock = vi.fn();
 const getAppointmentsMock = vi.fn();
 const getClientsMock = vi.fn();
+const getMonthlyRevenueMock = vi.fn();
 
 vi.mock("../hooks/useSession", () => ({ useSession: () => useSessionMock() }));
 vi.mock("../contexts/useWorkspaceContext", () => ({ useWorkspaceContext: () => useWorkspaceContextMock() }));
@@ -16,6 +17,7 @@ vi.mock("../hooks/useCurrentWorkspace", () => ({ useCurrentWorkspace: () => useC
 vi.mock("../hooks/useSubscription", () => ({ useSubscription: () => useSubscriptionMock() }));
 vi.mock("../services/appointments", () => ({ getAppointments: (...a) => getAppointmentsMock(...a) }));
 vi.mock("../services/clients", () => ({ getClients: (...a) => getClientsMock(...a) }));
+vi.mock("../services/revenue", () => ({ getMonthlyRevenue: (...a) => getMonthlyRevenueMock(...a) }));
 
 import StylistDashboard from "./StylistDashboard";
 
@@ -36,6 +38,10 @@ const APPT_ROW = (overrides = {}) => ({
 
 const CLIENT_ROW = (overrides = {}) => ({ id: "c1", full_name: "Amira Al-Fahad", last_visit_at: null, ...overrides });
 
+function revenueSummary(totalNet) {
+  return { totalNet, currency: "SAR", periodStart: "2026-08-01T00:00:00.000Z", periodEnd: "2026-09-01T00:00:00.000Z" };
+}
+
 function renderDashboard() {
   return render(
     <MemoryRouter>
@@ -52,11 +58,15 @@ describe("StylistDashboard page", () => {
     useSubscriptionMock.mockReset();
     getAppointmentsMock.mockReset();
     getClientsMock.mockReset();
+    getMonthlyRevenueMock.mockReset();
 
     useSessionMock.mockReturnValue({ user: { id: "u1" }, profile: { full_name: "Sara Al-Otaibi" }, loading: false });
     useWorkspaceContextMock.mockReturnValue({ workspaces: [], workspace: null, workspaceId: "ws-1", selectWorkspace: vi.fn(), loading: false, error: null });
     useCurrentWorkspaceMock.mockReturnValue({ workspaceId: "ws-1", loading: false, error: null, refresh: vi.fn() });
     useSubscriptionMock.mockReturnValue({ subscription: { subscription_status: "active" }, loading: false });
+    // Default for tests that don't care about revenue specifically -- the
+    // component's Promise.all needs every call to resolve to a real shape.
+    getMonthlyRevenueMock.mockResolvedValue(revenueSummary(0));
   });
 
   it("shows a loading title, then greets the signed-in professional by real profile data once loaded", async () => {
@@ -118,20 +128,59 @@ describe("StylistDashboard page", () => {
     expect(screen.queryByText("Amira Al-Fahad")).not.toBeInTheDocument();
   });
 
-  it("DESIGN ISSUE (reported, not fixed): 'revenue so far' and the average rating are hardcoded, not derived from any real data -- they don't change no matter what the mocked services return", async () => {
+  it("renders real monthly revenue from the service layer, workspace-scoped and currency-formatted", async () => {
+    getAppointmentsMock.mockResolvedValue([]);
+    getClientsMock.mockResolvedValue([]);
+    getMonthlyRevenueMock.mockResolvedValue(revenueSummary(5600));
+    renderDashboard();
+
+    expect(await screen.findByText("SAR 5,600")).toBeInTheDocument();
+    expect(screen.getByText("revenue this month")).toBeInTheDocument();
+    expect(getMonthlyRevenueMock).toHaveBeenCalledWith("ws-1");
+  });
+
+  it("revenue changes when the mocked workspace revenue data changes -- not a fixed number", async () => {
+    getAppointmentsMock.mockResolvedValue([]);
+    getClientsMock.mockResolvedValue([]);
+    getMonthlyRevenueMock.mockResolvedValue(revenueSummary(1250));
+    renderDashboard();
+
+    expect(await screen.findByText("SAR 1,250")).toBeInTheDocument();
+    expect(screen.queryByText("SAR 5,600")).not.toBeInTheDocument();
+  });
+
+  it("renders SAR 0 (a real, honest empty state) when the workspace has no revenue this month", async () => {
+    getAppointmentsMock.mockResolvedValue([]);
+    getClientsMock.mockResolvedValue([]);
+    getMonthlyRevenueMock.mockResolvedValue(revenueSummary(0));
+    renderDashboard();
+
+    // With zero appointments, "Est. fuel" also legitimately reads "SAR 0" --
+    // scope to the revenue stat specifically via its own label's sibling.
+    const revenueLabel = await screen.findByText("revenue this month");
+    expect(revenueLabel.previousElementSibling).toHaveTextContent("SAR 0");
+  });
+
+  it("shows an honest 'Not available' state for average client rating -- never a fabricated number, since no reviews/ratings table exists yet", async () => {
+    getAppointmentsMock.mockResolvedValue([]);
+    getClientsMock.mockResolvedValue([]);
+    renderDashboard();
+
+    expect(await screen.findByText("Not available")).toBeInTheDocument();
+    expect(screen.getByText("average client rating")).toBeInTheDocument();
+  });
+
+  it("REGRESSION: no hardcoded business metrics remain anywhere on the dashboard", async () => {
     getAppointmentsMock.mockResolvedValue([APPT_ROW()]);
     getClientsMock.mockResolvedValue([CLIENT_ROW(), CLIENT_ROW({ id: "c2" }), CLIENT_ROW({ id: "c3" })]);
+    getMonthlyRevenueMock.mockResolvedValue(revenueSummary(9999));
     renderDashboard();
     await screen.findByText(/Amira Al-Fahad/);
 
-    // Regardless of the 3 real clients and 1 real appointment supplied above,
-    // these two values are static string literals in StylistDashboard.jsx --
-    // see the Step 5 report for full detail. This test exists to make that
-    // fact visible and catch it if it silently changes, not to certify it as
-    // correct behavior.
-    expect(screen.getByText("SAR 5,600")).toBeInTheDocument();
-    expect(screen.getByText("revenue so far")).toBeInTheDocument();
-    expect(screen.getByText("4.9 ★")).toBeInTheDocument();
-    expect(screen.getByText("average client rating")).toBeInTheDocument();
+    expect(screen.queryByText("SAR 5,600")).not.toBeInTheDocument();
+    expect(screen.queryByText("4.9 ★")).not.toBeInTheDocument();
+    expect(screen.queryByText(/4\.9/)).not.toBeInTheDocument();
+    // The real mocked value for this render must be the one shown.
+    expect(screen.getByText("SAR 9,999")).toBeInTheDocument();
   });
 });

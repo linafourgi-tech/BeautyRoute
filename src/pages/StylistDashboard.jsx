@@ -6,6 +6,7 @@ import { useSession } from "../hooks/useSession";
 import { useCurrentWorkspace } from "../hooks/useCurrentWorkspace";
 import { getAppointments } from "../services/appointments";
 import { getClients } from "../services/clients";
+import { getMonthlyRevenue } from "../services/revenue";
 import { toAppointmentViewModel } from "../lib/appointmentView";
 import { Skeleton, EmptyState } from "../components/ui";
 import { ErrorState } from "../components/ErrorState";
@@ -33,6 +34,7 @@ export default function StylistDashboard() {
 
   const [appointments, setAppointments] = useState([]);
   const [clients, setClients] = useState([]);
+  const [monthlyRevenue, setMonthlyRevenue] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -52,19 +54,22 @@ export default function StylistDashboard() {
         if (!cancelled) {
           setAppointments([]);
           setClients([]);
+          setMonthlyRevenue(null);
           setLoading(false);
         }
         return;
       }
 
       try {
-        const [appointmentRows, clientRows] = await Promise.all([
+        const [appointmentRows, clientRows, revenueSummary] = await Promise.all([
           getAppointments(workspaceId),
           getClients(workspaceId),
+          getMonthlyRevenue(workspaceId),
         ]);
         if (cancelled) return;
         setAppointments((appointmentRows ?? []).map(toAppointmentViewModel));
         setClients((clientRows ?? []).map(toClientViewModel));
+        setMonthlyRevenue(revenueSummary.totalNet);
       } catch (err) {
         if (!cancelled) setError(err.message || "Couldn't load your dashboard.");
       } finally {
@@ -232,11 +237,15 @@ export default function StylistDashboard() {
               <p className="text-muted text-sm mt-1">active client passports</p>
             </div>
             <div>
-              <p className="text-3xl font-display text-wine">SAR 5,600</p>
-              <p className="text-muted text-sm mt-1">revenue so far</p>
+              <p className="text-3xl font-display text-wine">
+                {isLoading ? "—" : `SAR ${(monthlyRevenue ?? 0).toLocaleString("en-US")}`}
+              </p>
+              <p className="text-muted text-sm mt-1">revenue this month</p>
             </div>
             <div>
-              <p className="text-3xl font-display text-wine">4.9 ★</p>
+              {/* No reviews/ratings table exists in the schema yet -- show
+                  an honest unavailable state rather than a fabricated number. */}
+              <p className="text-xl font-display text-muted">Not available</p>
               <p className="text-muted text-sm mt-1">average client rating</p>
             </div>
             <Link
