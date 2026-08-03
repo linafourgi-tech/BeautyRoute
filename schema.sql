@@ -202,6 +202,43 @@ $$;
 ALTER FUNCTION "public"."bootstrap_professional_workspace"("p_business_name" "text", "p_business_type" "text", "p_city" "text") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."check_rate_limit"("p_function_name" "text", "p_window_seconds" integer, "p_max_requests" integer) RETURNS boolean
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+  v_user_id uuid := auth.uid();
+  v_count integer;
+BEGIN
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'Authentication required' USING ERRCODE = '28000';
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtextextended(v_user_id::text || ':' || p_function_name, 0));
+
+  DELETE FROM public.rate_limit_events
+  WHERE user_id = v_user_id
+    AND function_name = p_function_name
+    AND created_at < now() - (p_window_seconds || ' seconds')::interval;
+
+  SELECT count(*) INTO v_count
+  FROM public.rate_limit_events
+  WHERE user_id = v_user_id
+    AND function_name = p_function_name;
+
+  IF v_count >= p_max_requests THEN
+    RETURN false;
+  END IF;
+
+  INSERT INTO public.rate_limit_events (user_id, function_name) VALUES (v_user_id, p_function_name);
+  RETURN true;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."check_rate_limit"("p_function_name" "text", "p_window_seconds" integer, "p_max_requests" integer) OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."delete_workspace"("p_workspace_id" "uuid") RETURNS "void"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -575,6 +612,28 @@ CREATE TABLE IF NOT EXISTS "public"."profiles" (
 ALTER TABLE "public"."profiles" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."rate_limit_events" (
+    "id" bigint NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "function_name" "text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."rate_limit_events" OWNER TO "postgres";
+
+
+ALTER TABLE "public"."rate_limit_events" ALTER COLUMN "id" ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME "public"."rate_limit_events_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."revenues" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "workspace_id" "uuid" NOT NULL,
@@ -774,6 +833,11 @@ ALTER TABLE ONLY "public"."profiles"
 
 
 
+ALTER TABLE ONLY "public"."rate_limit_events"
+    ADD CONSTRAINT "rate_limit_events_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."revenues"
     ADD CONSTRAINT "revenues_pkey" PRIMARY KEY ("id");
 
@@ -842,6 +906,10 @@ CREATE INDEX "idx_clients_workspace_search" ON "public"."clients" USING "btree" 
 
 
 CREATE INDEX "idx_files_polymorphic" ON "public"."files" USING "btree" ("entity_type", "entity_id");
+
+
+
+CREATE INDEX "idx_rate_limit_events_user_function_time" ON "public"."rate_limit_events" USING "btree" ("user_id", "function_name", "created_at");
 
 
 
@@ -1129,6 +1197,9 @@ CREATE POLICY "notifications_access" ON "public"."notifications" USING (("recipi
 ALTER TABLE "public"."profiles" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."rate_limit_events" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."revenues" ENABLE ROW LEVEL SECURITY;
 
 
@@ -1201,6 +1272,12 @@ GRANT ALL ON FUNCTION "public"."audit_trigger"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."bootstrap_professional_workspace"("p_business_name" "text", "p_business_type" "text", "p_city" "text") TO "anon";
 GRANT ALL ON FUNCTION "public"."bootstrap_professional_workspace"("p_business_name" "text", "p_business_type" "text", "p_city" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."bootstrap_professional_workspace"("p_business_name" "text", "p_business_type" "text", "p_city" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."check_rate_limit"("p_function_name" "text", "p_window_seconds" integer, "p_max_requests" integer) TO "anon";
+GRANT ALL ON FUNCTION "public"."check_rate_limit"("p_function_name" "text", "p_window_seconds" integer, "p_max_requests" integer) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."check_rate_limit"("p_function_name" "text", "p_window_seconds" integer, "p_max_requests" integer) TO "service_role";
 
 
 
@@ -1297,6 +1374,18 @@ GRANT ALL ON TABLE "public"."notifications" TO "service_role";
 GRANT ALL ON TABLE "public"."profiles" TO "anon";
 GRANT ALL ON TABLE "public"."profiles" TO "authenticated";
 GRANT ALL ON TABLE "public"."profiles" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."rate_limit_events" TO "anon";
+GRANT ALL ON TABLE "public"."rate_limit_events" TO "authenticated";
+GRANT ALL ON TABLE "public"."rate_limit_events" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."rate_limit_events_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."rate_limit_events_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."rate_limit_events_id_seq" TO "service_role";
 
 
 

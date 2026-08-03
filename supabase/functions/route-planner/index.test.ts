@@ -300,6 +300,151 @@ Deno.test("reroute rejects an empty order as stale_route", async () => {
   }
 });
 
+// The durable rate limiter is a Postgres RPC (check_rate_limit(), see
+// supabase/migrations/20260803140000_durable_rate_limiting.sql) -- from the
+// Edge Function's own perspective, all of that lives behind one HTTP call
+// to /rest/v1/rpc/check_rate_limit. These tests mock that boundary and
+// prove the HANDLER's reaction to it (proceed on true, 429 on false, fail
+// open on an error) -- the actual sliding-window counting, atomicity, and
+// per-(user, function) isolation live in the SQL function itself, and are
+// covered separately by
+// supabase/migrations/20260803140000_durable_rate_limiting.test.ts's
+// structural assertions against that function's real source.
+function rpcRoute(sequence: boolean[]): () => Response {
+  let i = 0;
+  return () => {
+    const allowed = i < sequence.length ? sequence[i] : sequence[sequence.length - 1];
+    i += 1;
+    return jsonRes(allowed);
+  };
+}
+
+Deno.test("rate-limit: requests under the limit proceed past the rate limiter to the next check", async () => {
+  const restore = stubFetch({
+    "/auth/v1/user": () => authUserResponse("user-under-limit"),
+    "/rest/v1/rpc/check_rate_limit": rpcRoute([true]),
+    "/rest/v1/workspaces": () => jsonRes([]),
+  });
+  try {
+    const res = await handler(postRequest(FUNCTION_URL, { action: "plan", workspaceId: FAKE_WORKSPACE_ID, date: "2026-08-02" }, authHeader()));
+    assertEquals(res.status, 403); // workspace_forbidden -- proves it got past the rate limiter
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("rate-limit: exact limit boundary -- the 20th request still proceeds, the 21st is rejected", async () => {
+  const sequence = [...Array(20).fill(true), false];
+  const restore = stubFetch({
+    "/auth/v1/user": () => authUserResponse("user-rate-limit-boundary"),
+    "/rest/v1/rpc/check_rate_limit": rpcRoute(sequence),
+    "/rest/v1/workspaces": () => jsonRes([]),
+  });
+  try {
+    let last: Response | null = null;
+    for (let i = 0; i < 21; i++) {
+      last = await handler(postRequest(FUNCTION_URL, { action: "plan", workspaceId: FAKE_WORKSPACE_ID, date: "2026-08-02" }, authHeader()));
+      if (i < 20) assertEquals(last.status, 403, `call #${i + 1} should still be under the limit`);
+    }
+    assertEquals(last!.status, 429);
+    assertObjectMatch(await last!.json(), { ok: false, code: "rate_limited" });
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("rate-limit: passes its own function name to the limiter, not the caller's -- cross-function isolation", async () => {
+  let capturedBody: Record<string, unknown> | null = null;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = input instanceof Request ? input.url : input.toString();
+    if (url.includes("/auth/v1/user")) return authUserResponse("user-function-name-check");
+    if (url.includes("/rest/v1/rpc/check_rate_limit")) {
+      capturedBody = JSON.parse(String(init?.body ?? "{}"));
+      return jsonRes(true);
+    }
+    if (url.includes("/rest/v1/workspaces")) return jsonRes([]);
+    throw new Error(`Unmocked fetch: ${url}`);
+  }) as typeof fetch;
+  try {
+    await handler(postRequest(FUNCTION_URL, { action: "plan", workspaceId: FAKE_WORKSPACE_ID, date: "2026-08-02" }, authHeader()));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assertObjectMatch(capturedBody!, { p_function_name: "route-planner", p_window_seconds: 600, p_max_requests: 20 });
+  // No caller-supplied user id is ever sent -- the database function scopes
+  // to auth.uid() from the caller's own forwarded JWT instead, so one
+  // user's requests can never be checked or consumed against another's
+  // counter from this side either, and this name can never collide with
+  // ai-assistant's own "ai-assistant" counter.
+  assertEquals(Object.keys(capturedBody!).includes("user_id"), false);
+  assertEquals(Object.keys(capturedBody!).includes("p_user_id"), false);
+});
+
+Deno.test("rate-limit: fails open (request proceeds) when the limiter RPC itself errors, and logs the failure", async () => {
+  const logs: string[] = [];
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => logs.push(args.map(String).join(" "));
+  const restore = stubFetch({
+    "/auth/v1/user": () => authUserResponse("user-limiter-down"),
+    "/rest/v1/rpc/check_rate_limit": () => jsonRes({ message: "connection error" }, 500),
+    "/rest/v1/workspaces": () => jsonRes([]),
+  });
+  try {
+    const res = await handler(postRequest(FUNCTION_URL, { action: "plan", workspaceId: FAKE_WORKSPACE_ID, date: "2026-08-02" }, authHeader()));
+    assertEquals(res.status, 403);
+    assertObjectMatch(await res.json(), { ok: false, code: "workspace_forbidden" });
+  } finally {
+    console.log = originalLog;
+    restore();
+  }
+  assertEquals(logs.some((l) => l.includes("rate_limit_check_failed_open")), true);
+});
+
+Deno.test("CORS: reflects an allowed configured origin in Access-Control-Allow-Origin", async () => {
+  Deno.env.set("ALLOWED_ORIGINS", "https://app.beautyroute.example");
+  try {
+    const res = await handler(new Request(FUNCTION_URL, { method: "OPTIONS", headers: { Origin: "https://app.beautyroute.example" } }));
+    assertEquals(res.headers.get("Access-Control-Allow-Origin"), "https://app.beautyroute.example");
+    assertEquals(res.headers.get("Vary"), "Origin");
+  } finally {
+    Deno.env.delete("ALLOWED_ORIGINS");
+  }
+});
+
+Deno.test("CORS: a local dev origin is always allowed even with no ALLOWED_ORIGINS configured", async () => {
+  const res = await handler(new Request(FUNCTION_URL, { method: "OPTIONS", headers: { Origin: "http://localhost:5173" } }));
+  assertEquals(res.headers.get("Access-Control-Allow-Origin"), "http://localhost:5173");
+});
+
+Deno.test("CORS: a disallowed origin gets no Access-Control-Allow-Origin header", async () => {
+  Deno.env.set("ALLOWED_ORIGINS", "https://app.beautyroute.example");
+  try {
+    const res = await handler(new Request(FUNCTION_URL, { method: "OPTIONS", headers: { Origin: "https://evil.example" } }));
+    assertEquals(res.headers.get("Access-Control-Allow-Origin"), null);
+  } finally {
+    Deno.env.delete("ALLOWED_ORIGINS");
+  }
+});
+
+Deno.test("CORS: a request with no Origin header gets no Access-Control-Allow-Origin header but is still processed", async () => {
+  const res = await handler(postRequest(FUNCTION_URL, { action: "plan", workspaceId: FAKE_WORKSPACE_ID, date: "2026-08-02" }));
+  assertEquals(res.headers.get("Access-Control-Allow-Origin"), null);
+  assertEquals(res.status, 401);
+});
+
+Deno.test("CORS: OPTIONS preflight returns the right headers and no body", async () => {
+  Deno.env.set("ALLOWED_ORIGINS", "https://app.beautyroute.example");
+  try {
+    const res = await handler(new Request(FUNCTION_URL, { method: "OPTIONS", headers: { Origin: "https://app.beautyroute.example" } }));
+    assertEquals(res.headers.get("Access-Control-Allow-Methods"), "POST, OPTIONS");
+    assertEquals(res.headers.get("Access-Control-Allow-Headers"), "authorization, x-client-info, apikey, content-type");
+    assertEquals(await res.text(), "");
+  } finally {
+    Deno.env.delete("ALLOWED_ORIGINS");
+  }
+});
+
 Deno.test("reroute accepts a valid SUBSET reorder (client only resubmits successfully-geocoded stops, not every addressed appointment)", async () => {
   Deno.env.set("MAPBOX_SECRET_TOKEN", "fake-mapbox-token");
   const restore = stubFetch({

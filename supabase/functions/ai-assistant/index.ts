@@ -19,12 +19,10 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import Anthropic from "npm:@anthropic-ai/sdk";
 import { hasFeature } from "../_shared/planRules.ts";
+import { corsHeadersFor } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rateLimit.ts";
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+const FUNCTION_NAME = "ai-assistant";
 
 const MODEL = "claude-opus-4-8";
 const MAX_OUTPUT_TOKENS = 1024;
@@ -36,26 +34,13 @@ const FUNCTION_DEADLINE_MS = 45_000;
 const RECENT_APPOINTMENTS_LIMIT = 15;
 const RECENT_VISITS_LIMIT = 10;
 
-// Best-effort, per-isolate rate limit. Edge Function isolates are ephemeral
-// and can run in more than one region, so this is NOT a durable, global
-// guarantee -- it just stops a single hot loop from one warm isolate. A real
-// cross-instance limit would need a shared store (e.g. a new table), which
-// is a schema change outside this phase's scope; see the Phase 11 report.
-const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+// Durable, shared rate limit -- see supabase/functions/_shared/rateLimit.ts
+// and supabase/migrations/20260803140000_durable_rate_limiting.sql. Same
+// policy (20 requests / 10 minutes / user) as the previous per-isolate
+// in-memory limiter this replaces, now enforced against a shared Postgres
+// counter rather than a Map that reset on every cold isolate.
+const RATE_LIMIT_WINDOW_SECONDS = 10 * 60;
 const RATE_LIMIT_MAX_REQUESTS = 20;
-const rateLimitState = new Map<string, number[]>();
-
-function checkRateLimit(userId: string): boolean {
-  const now = Date.now();
-  const timestamps = (rateLimitState.get(userId) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-  if (timestamps.length >= RATE_LIMIT_MAX_REQUESTS) {
-    rateLimitState.set(userId, timestamps);
-    return false;
-  }
-  timestamps.push(now);
-  rateLimitState.set(userId, timestamps);
-  return true;
-}
 
 const SYSTEM_PROMPT = `You are the BeautyRoute AI Assistant, a professional assistant for independent beauty professionals and salons using the BeautyRoute app.
 
@@ -84,15 +69,20 @@ const ACTION_INSTRUCTIONS: Record<string, string> = {
 
 type Json = Record<string, unknown>;
 
-function jsonResponse(body: Json, status: number) {
+// CORS headers now depend on the caller's own Origin (see
+// supabase/functions/_shared/cors.ts), so these take `cors` explicitly
+// rather than spreading a static module-level constant. The handler below
+// shadows both names with request-scoped closures over its own computed
+// `cors` value, so every call site further down is unchanged.
+function buildJsonResponse(body: Json, status: number, cors: Record<string, string>) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+    headers: { ...cors, "Content-Type": "application/json" },
   });
 }
 
-function safeError(status: number, code: string, message: string) {
-  return jsonResponse({ ok: false, code, error: message }, status);
+function buildSafeError(status: number, code: string, message: string, cors: Record<string, string>) {
+  return buildJsonResponse({ ok: false, code, error: message }, status, cors);
 }
 
 function log(fields: Record<string, unknown>) {
@@ -324,9 +314,12 @@ async function runTool(
 Deno.serve(async (req: Request) => {
   const requestId = crypto.randomUUID();
   const startedAt = Date.now();
+  const cors = corsHeadersFor(req.headers.get("Origin"));
+  const jsonResponse = (body: Json, status: number) => buildJsonResponse(body, status, cors);
+  const safeError = (status: number, code: string, message: string) => buildSafeError(status, code, message, cors);
 
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: CORS_HEADERS });
+    return new Response(null, { headers: cors });
   }
   if (req.method !== "POST") {
     return safeError(405, "method_not_allowed", "Only POST is supported.");
@@ -361,7 +354,11 @@ Deno.serve(async (req: Request) => {
   }
   const userId = userData.user.id;
 
-  if (!checkRateLimit(userId)) {
+  const rateLimit = await checkRateLimit(supabase, FUNCTION_NAME, RATE_LIMIT_WINDOW_SECONDS, RATE_LIMIT_MAX_REQUESTS);
+  if (rateLimit.failedOpen) {
+    log({ requestId, userId, action, status: "rate_limit_check_failed_open" });
+  }
+  if (!rateLimit.allowed) {
     return safeError(429, "rate_limited", "Too many AI requests in a short time. Please wait a moment and try again.");
   }
 

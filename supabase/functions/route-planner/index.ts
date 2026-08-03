@@ -20,12 +20,10 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { hasFeature } from "../_shared/planRules.ts";
+import { corsHeadersFor } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rateLimit.ts";
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+const FUNCTION_NAME = "route-planner";
 
 // Mapbox's driving-profile Matrix/Directions APIs cap coordinates per
 // request at 25 on the free tier. Reserve 2 for optional start/end.
@@ -35,33 +33,27 @@ const DEFAULT_SERVICE_MINUTES = 30; // used only when an appointment has no link
 const MAPBOX_TIMEOUT_MS = 10_000;
 const MAX_LOCATION_LENGTH = 300;
 
-// Best-effort, per-isolate rate limit -- same caveat as ai-assistant's:
-// Edge Function isolates are ephemeral and can run in more than one region,
-// so this is not a durable, global guarantee.
-const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+// Durable, shared rate limit -- see supabase/functions/_shared/rateLimit.ts
+// and supabase/migrations/20260803140000_durable_rate_limiting.sql. Same
+// policy (20 requests / 10 minutes / user) as the previous per-isolate
+// in-memory limiter this replaces, now enforced against a shared Postgres
+// counter rather than a Map that reset on every cold isolate.
+const RATE_LIMIT_WINDOW_SECONDS = 10 * 60;
 const RATE_LIMIT_MAX_REQUESTS = 20;
-const rateLimitState = new Map<string, number[]>();
-
-function checkRateLimit(userId: string): boolean {
-  const now = Date.now();
-  const timestamps = (rateLimitState.get(userId) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-  if (timestamps.length >= RATE_LIMIT_MAX_REQUESTS) {
-    rateLimitState.set(userId, timestamps);
-    return false;
-  }
-  timestamps.push(now);
-  rateLimitState.set(userId, timestamps);
-  return true;
-}
 
 type Json = Record<string, unknown>;
 
-function jsonResponse(body: Json, status: number) {
-  return new Response(JSON.stringify(body), { status, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
+// CORS headers now depend on the caller's own Origin (see
+// supabase/functions/_shared/cors.ts), so these take `cors` explicitly
+// rather than spreading a static module-level constant. The handler below
+// shadows both names with request-scoped closures over its own computed
+// `cors` value, so every call site further down is unchanged.
+function buildJsonResponse(body: Json, status: number, cors: Record<string, string>) {
+  return new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 }
 
-function safeError(status: number, code: string, message: string) {
-  return jsonResponse({ ok: false, code, error: message }, status);
+function buildSafeError(status: number, code: string, message: string, cors: Record<string, string>) {
+  return buildJsonResponse({ ok: false, code, error: message }, status, cors);
 }
 
 function log(fields: Record<string, unknown>) {
@@ -253,8 +245,11 @@ async function fetchRoutableAppointments(
 Deno.serve(async (req: Request) => {
   const requestId = crypto.randomUUID();
   const startedAt = Date.now();
+  const cors = corsHeadersFor(req.headers.get("Origin"));
+  const jsonResponse = (body: Json, status: number) => buildJsonResponse(body, status, cors);
+  const safeError = (status: number, code: string, message: string) => buildSafeError(status, code, message, cors);
 
-  if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
+  if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   if (req.method !== "POST") return safeError(405, "method_not_allowed", "Only POST is supported.");
 
   const authHeader = req.headers.get("Authorization");
@@ -283,7 +278,11 @@ Deno.serve(async (req: Request) => {
   if (userError || !userData?.user) return safeError(401, "unauthenticated", "Your session has expired. Please sign in again.");
   const userId = userData.user.id;
 
-  if (!checkRateLimit(userId)) {
+  const rateLimit = await checkRateLimit(supabase, FUNCTION_NAME, RATE_LIMIT_WINDOW_SECONDS, RATE_LIMIT_MAX_REQUESTS);
+  if (rateLimit.failedOpen) {
+    log({ requestId, userId, action, status: "rate_limit_check_failed_open" });
+  }
+  if (!rateLimit.allowed) {
     return safeError(429, "rate_limited", "Too many route requests in a short time. Please wait a moment and try again.");
   }
 
