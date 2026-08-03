@@ -47,7 +47,7 @@ export default function Login() {
 
   return (
     <AuthShell>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} noValidate>
         <h1 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h2)", color: "var(--text-primary)", margin: "0 0 6px" }}>
           Welcome back
         </h1>

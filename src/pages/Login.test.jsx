@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 
@@ -55,21 +55,37 @@ describe("Login page", () => {
     expect(signInUserMock).not.toHaveBeenCalled();
   });
 
-  it("shows a validation error for a malformed email", async () => {
+  it("shows the app's own validation error for a malformed email via a real click submit (not native browser validation)", async () => {
     const user = userEvent.setup();
     renderLogin();
 
     await user.type(screen.getByLabelText("Email"), "not-an-email");
     await user.type(screen.getByLabelText("Password"), "hunter2");
-    // The native <input type="email"> constraint validation (jsdom, like a
-    // real browser) blocks a click-triggered submit before React's onSubmit
-    // ever runs for a value with no "@" at all -- fire the submit event
-    // directly to exercise the app's own EMAIL_RE-based validation message
-    // instead of the browser's native one.
-    fireEvent.submit(screen.getByRole("button", { name: "Sign in" }).closest("form"));
+    // The form has noValidate (Phase 16 Step 3), so this real user click is
+    // never intercepted by the browser's native <input type="email">
+    // constraint validation -- BeautyRoute's own EMAIL_RE-based message is
+    // always what appears, not whichever one the browser happened to show.
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
 
     expect(await screen.findByText("Enter a valid email address.")).toBeInTheDocument();
     expect(signInUserMock).not.toHaveBeenCalled();
+  });
+
+  it("REGRESSION: exposes the malformed-email error to assistive tech via aria-invalid and aria-describedby", async () => {
+    const user = userEvent.setup();
+    renderLogin();
+
+    const emailInput = screen.getByLabelText("Email");
+    await user.type(emailInput, "not-an-email");
+    await user.type(screen.getByLabelText("Password"), "hunter2");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    const errorMessage = await screen.findByText("Enter a valid email address.");
+    expect(emailInput).toHaveAttribute("aria-invalid", "true");
+    expect(emailInput).toHaveAttribute("aria-describedby", errorMessage.id);
+    // role="alert" is what makes an appearing error get announced
+    // immediately, not only when a screen reader user happens to tab onto it.
+    expect(errorMessage).toHaveAttribute("role", "alert");
   });
 
   it("signs in and navigates to /dashboard when onboarding is already completed", async () => {
