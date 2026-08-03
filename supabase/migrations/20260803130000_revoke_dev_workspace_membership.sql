@@ -1,0 +1,38 @@
+-- Phase 12 Step 5: revoke the standing dev-workspace membership grant
+-- flagged during the Security Review as H-2.
+--
+-- 20260724110000_seed_dev_workspace_membership.sql added a workspace_staff
+-- row linking the seeded local-dev auth profile
+-- (e59f77cf-4cf1-4ae6-b87b-7f2932fe6ca4) to the "BeautyRoute Demo" workspace
+-- (3c26322e-d230-423a-b3de-2d4fd64a7c9e, owned by a different, real profile
+-- f6c66ce9-760f-4032-9519-ffee5fe92677) so that a local developer's Vite
+-- dev-auth bootstrap (src/lib/devAuth.js, gated behind import.meta.env.DEV)
+-- would satisfy is_workspace_member() during local development. Unlike
+-- every other test-data migration in this project's history (the Phase 9
+-- second workspace, the Phase 11 verification workspaces), that migration
+-- had no corresponding cleanup migration -- it granted permanent,
+-- unexpiring membership with no revocation path ever recorded in version
+-- control.
+--
+-- Security Review verification: a read-only query against the live linked
+-- project (no client/business data inspected -- only ids, a boolean
+-- existence check, and an active-membership count) confirmed, immediately
+-- before this migration was written, that this exact row still existed on
+-- the one real "BeautyRoute" Supabase project, and that it was one of
+-- exactly two active workspace_staff rows for this workspace -- the other
+-- being the workspace's real owner (f6c66ce9-760f-4032-9519-ffee5fe92677).
+-- Removing this one row leaves the owner's own membership completely
+-- untouched, and leaves the workspace and both profiles themselves fully
+-- intact -- only this single membership grant is revoked.
+--
+-- This migration is idempotent: the WHERE clause matches at most one row,
+-- so re-running it on an environment where the row is already gone (or was
+-- never seeded) is a safe no-op, not an error.
+--
+-- Recurrence prevention: see docs/quality/DATABASE_MIGRATION_POLICY.md --
+-- dev/local-only auth bootstrapping must never again grant membership into
+-- a real, named, pre-existing workspace via a permanent migration with no
+-- matching cleanup.
+DELETE FROM public.workspace_staff
+WHERE workspace_id = '3c26322e-d230-423a-b3de-2d4fd64a7c9e'
+  AND profile_id = 'e59f77cf-4cf1-4ae6-b87b-7f2932fe6ca4';
