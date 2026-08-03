@@ -55,7 +55,7 @@ data only — see Current Limitations):
 
 - **Frontend:** React 19, Vite, React Router 7, Tailwind CSS v4, Recharts, lucide-react
 - **Backend:** Supabase (Postgres, Auth, Row-Level Security, Edge Functions)
-- **AI:** Anthropic Claude, called only from a server-side Supabase Edge Function
+- **AI:** Server-side LLM integration, called only from a server-side Supabase Edge Function
 - **Maps/Routing:** Mapbox (Geocoding, Matrix, Directions APIs server-side; Mapbox GL JS client-side for rendering)
 - **Tooling:** oxlint (linting), Supabase CLI
 
@@ -90,10 +90,10 @@ forwarded Supabase JWT before doing anything.
 BeautyRoute has **two separate AI-related initiatives**. They are not the
 same thing and should not be described interchangeably:
 
-- **AI Assistant — implemented application feature.** A live feature that
-  calls the Anthropic Claude API from the `ai-assistant` Supabase Edge
-  Function only (the API key is a server-side secret, never present in the
-  browser bundle). It provides client summaries, next-visit suggestions,
+- **AI Assistant — implemented application feature.** A live feature backed
+  by a server-side LLM integration, called only from the `ai-assistant`
+  Supabase Edge Function (the provider API key is a server-side secret,
+  never present in the browser bundle). It provides client summaries, next-visit suggestions,
   aftercare guidance, and workspace chat, gated by the caller's forwarded
   JWT, workspace membership, and server-side plan checks (`hasFeature`).
   Source: `supabase/functions/ai-assistant/index.ts`, `src/services/ai.ts`,
@@ -112,8 +112,8 @@ same thing and should not be described interchangeably:
 - **Authorization is database-enforced**, via Postgres row-level-security
   policies keyed on workspace membership — the frontend never asserts access
   on its own.
-- **Provider secrets never reach the browser.** The Anthropic API key and the
-  Mapbox *secret* token exist only as Supabase Edge Function secrets. The one
+- **Provider secrets never reach the browser.** The LLM provider API key and
+  the Mapbox *secret* token exist only as Supabase Edge Function secrets. The one
   deliberate exception is the Mapbox *public* token (`VITE_MAPBOX_PUBLIC_TOKEN`),
   which Mapbox explicitly designs for browser exposure and which is
   domain-restricted in the Mapbox account; it cannot geocode or compute
@@ -122,9 +122,9 @@ same thing and should not be described interchangeably:
   function is called with the user's own forwarded Supabase JWT and performs
   its own auth + workspace-membership + plan-gating checks server-side,
   independent of the frontend's own `FeatureGate` UI.
-- **No automated test suite currently exists** (see Current Limitations) and
-  no formal security review has been completed yet — see
-  `docs/PROJECT_ROADMAP.md` (Phase 11, Phase 12).
+- **Automated tests exist and run in CI** (244 Vitest tests, 43 Deno Edge
+  Function tests — see Section 17), but **no formal security review has
+  been completed yet** — see `docs/PROJECT_ROADMAP.md` (Phase 12).
 
 ## 10. Maps & Routing status
 
@@ -147,8 +147,8 @@ runs server-side and is unaffected by this.
 ```text
 src/
   components/       Shared UI (components/ui/), layout, auth/onboarding/
-                     routing/subscription-specific components, the map
-                     component, and the day-view canvas.
+                     routing/subscription-specific components, and the map
+                     component.
   contexts/          WorkspaceContext (current workspace/session state).
   data/              Static mock data still used by Business Engine and
                      Client Portal (see Current Limitations).
@@ -199,8 +199,8 @@ commit real values:
 - `VITE_DEV_PASSWORD` (dev-only auth bootstrap, gated behind `import.meta.env.DEV`)
 
 Server-side secrets (set via `supabase secrets set`, never in a `VITE_` var
-or committed anywhere): `MAPBOX_SECRET_TOKEN`, and the Anthropic API key used
-by the `ai-assistant` Edge Function.
+or committed anywhere): `MAPBOX_SECRET_TOKEN`, and `ANTHROPIC_API_KEY` (the
+LLM provider key used by the `ai-assistant` Edge Function).
 
 ## 14. Database and schema.sql
 
@@ -241,14 +241,13 @@ not a current data-integrity issue; see the Risks section of
   blocked on dataset licensing review (see Section 8).
 - **Business Engine, Client Portal, and Salon Engine are not wired to real
   data** (see Section 4).
-- **No automated test suite exists yet** anywhere in the repository; all
-  shipped features rely on manual/live verification.
 - **No formal security review has been completed yet.**
-- **`npm run lint` currently reports findings** — a handful of minor
-  unused-variable warnings in `src/`, plus a larger set of warnings (and one
-  parse error) inside `docs/design-reference/`, which is expected: that
-  directory is explicitly historical/unresolved design-tool export material,
-  not code meant to lint clean (see its `NOTICE.md`).
+- **No Supabase-local-dev/RLS integration test tier exists yet** — RLS
+  policies themselves are not yet exercised by an automated test against a
+  real Postgres instance; automated tests cover the application-code
+  authorization logic that runs alongside RLS. See
+  `docs/testing/PHASE_15_FINAL_REPORT.md`.
+- **No end-to-end (Playwright) tests exist yet.**
 - **Production build emits bundle-size warnings** (main bundle and the
   Mapbox GL chunk both exceed the default 500 kB advisory threshold) — see
   [`docs/operations/BUILD_NOTES.md`](docs/operations/BUILD_NOTES.md) for the
@@ -258,16 +257,25 @@ not a current data-integrity issue; see the Risks section of
 
 See `docs/PROJECT_ROADMAP.md` for the authoritative, maintained phase-by-phase
 status. As of this writing: authentication, onboarding, clients, services,
-appointments, the Beauty Passport, the AI Assistant, and Maps & Routing are
-implemented and live-verified against real backends; testing, a formal
-security review, performance optimization, deployment automation, and beta
-launch are still planned.
+appointments, the Beauty Passport, the AI Assistant, Maps & Routing, and
+automated testing are complete; a formal security review, performance
+optimization, deployment automation, and beta launch are still planned.
+
+Automated testing is implemented and enforced in CI on every push/PR via
+`.github/workflows/ci.yml`:
+
+- **244 Vitest + React Testing Library tests** (frontend unit, hook, and
+  component tests) — all passing.
+- **43 Deno tests** covering both Supabase Edge Functions and the shared
+  plan-gating module — all passing.
+- **`npm run lint` currently passes with zero findings.**
+
+Full record, including known coverage gaps and issues found (but not yet
+fixed) along the way: `docs/testing/PHASE_15_FINAL_REPORT.md`.
 
 ## 18. Branch strategy
 
-- **`design-integration`** is the current, authoritative development branch.
-  All active work happens here.
-- **`main`** intentionally still contains the original repository skeleton
-  and has not been updated. It will be reconciled with `design-integration`
-  in a later, deliberate step — do not assume `main` reflects the current
-  application.
+- **`main`** is the authoritative and default branch. It reflects the
+  current application described throughout this document.
+- **`design-integration`** still exists alongside `main` for now and has not
+  yet been removed.

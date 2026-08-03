@@ -10,9 +10,9 @@ name: CI
 
 on:
   push:
-    branches: [design-integration]
+    branches: [main]
   pull_request:
-    branches: [design-integration]
+    branches: [main]
   workflow_dispatch: {}
 
 permissions:
