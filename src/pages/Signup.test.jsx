@@ -76,7 +76,7 @@ describe("Signup page", () => {
     expect(signUpUserMock).toHaveBeenCalledWith("sara@example.com", "hunter2!", { full_name: "Sara Al-Otaibi" });
   });
 
-  it("shows an 'already exists' error for Supabase's anti-enumeration response (no session, empty identities)", async () => {
+  it("REGRESSION: shows the same generic confirmation notice for Supabase's anti-enumeration response (no session, empty identities) -- never reveals the account already exists", async () => {
     signUpUserMock.mockResolvedValue({ session: null, user: { id: "u1", identities: [] } });
 
     const user = userEvent.setup();
@@ -84,10 +84,11 @@ describe("Signup page", () => {
     await fillValidForm(user);
     await user.click(screen.getByRole("button", { name: "Create account" }));
 
-    expect(await screen.findByText("An account with this email already exists. Try signing in instead.")).toBeInTheDocument();
+    expect(await screen.findByText("Account created — check your email to confirm before signing in.")).toBeInTheDocument();
+    expect(screen.queryByText(/already exists/i)).not.toBeInTheDocument();
   });
 
-  it("shows an email-confirmation notice when a new account requires confirmation", async () => {
+  it("shows the identical email-confirmation notice when a new account requires confirmation", async () => {
     signUpUserMock.mockResolvedValue({ session: null, user: { id: "u1", identities: [{ id: "identity-1" }] } });
 
     const user = userEvent.setup();
@@ -96,6 +97,25 @@ describe("Signup page", () => {
     await user.click(screen.getByRole("button", { name: "Create account" }));
 
     expect(await screen.findByText("Account created — check your email to confirm before signing in.")).toBeInTheDocument();
+  });
+
+  it("REGRESSION: the already-registered and new-signup responses are indistinguishable to the user", async () => {
+    signUpUserMock.mockResolvedValue({ session: null, user: { id: "u1", identities: [] } });
+    const user = userEvent.setup();
+    const { unmount } = renderSignup();
+    await fillValidForm(user);
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+    const alreadyExistsNotice = (await screen.findByText("Account created — check your email to confirm before signing in.")).textContent;
+    unmount();
+
+    signUpUserMock.mockResolvedValue({ session: null, user: { id: "u2", identities: [{ id: "identity-1" }] } });
+    const user2 = userEvent.setup();
+    renderSignup();
+    await fillValidForm(user2);
+    await user2.click(screen.getByRole("button", { name: "Create account" }));
+    const newSignupNotice = (await screen.findByText("Account created — check your email to confirm before signing in.")).textContent;
+
+    expect(alreadyExistsNotice).toBe(newSignupNotice);
   });
 
   it("shows the server error message when sign-up throws", async () => {

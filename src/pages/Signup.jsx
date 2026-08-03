@@ -41,13 +41,14 @@ export default function Signup() {
       const data = await signUpUser(email, password, { full_name: fullName });
       if (data?.session) {
         navigate("/onboarding");
-      } else if (data?.user?.identities?.length === 0) {
-        // Supabase's anti-enumeration response: this email is already
-        // registered. No account was created and no email was sent, even
-        // though the call itself didn't error.
-        setFormError("An account with this email already exists. Try signing in instead.");
       } else {
-        // Email confirmation is required before a session is issued.
+        // Supabase already avoids leaking account existence at the API level:
+        // an already-registered email returns no error and no session
+        // (data.user.identities is empty) exactly like a genuine new signup
+        // pending confirmation does. Showing a different message for that
+        // case -- as this used to -- would reintroduce the account
+        // enumeration Supabase's own response is designed to prevent, so
+        // both cases get the identical notice here.
         setFormNotice("Account created — check your email to confirm before signing in.");
       }
     } catch (err) {
