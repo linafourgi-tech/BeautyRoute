@@ -438,8 +438,8 @@ export default function BeautyPassport() {
                           <Field label="Photos">
                             {before || after ? (
                               <div className="flex gap-3">
-                                {before && <img src={before.file_url} alt="Before" className="h-24 w-24 rounded-lg object-cover border border-line" />}
-                                {after && <img src={after.file_url} alt="After" className="h-24 w-24 rounded-lg object-cover border border-line" />}
+                                {before && <img src={before.file_url} alt="Before" width={96} height={96} loading="lazy" className="h-24 w-24 rounded-lg object-cover border border-line" />}
+                                {after && <img src={after.file_url} alt="After" width={96} height={96} loading="lazy" className="h-24 w-24 rounded-lg object-cover border border-line" />}
                               </div>
                             ) : (
                               <p className="text-muted text-xs">No photos on file.</p>

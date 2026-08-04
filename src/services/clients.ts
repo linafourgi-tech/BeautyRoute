@@ -4,14 +4,23 @@ import { Database } from '../lib/supabase-types'
 type InsertClient = Database['public']['Tables']['clients']['Insert']
 type UpdateClient = Database['public']['Tables']['clients']['Update']
 
+// Phase 13 Step 4: narrowed from select('*') after verifying every current
+// consumer's field usage (Clients.jsx, StylistDashboard.jsx,
+// BeautyPassport.jsx, Appointments.jsx's client picker) -- none read
+// date_of_birth, gender, occupation, instagram, next_appointment_at, or
+// updated_at. workspace_id is kept even though no consumer reads it off
+// the row directly, per "do not remove fields used for security/scoping."
+const CLIENT_LIST_COLUMNS =
+  'id, workspace_id, full_name, phone, email, tier, allergies, internal_notes, last_visit_at, created_at'
+
 // 1. Get all clients for a specific workspace (salon)
 export async function getClients(workspaceId: string) {
   const { data, error } = await supabase
     .from('clients')
-    .select('*')
+    .select(CLIENT_LIST_COLUMNS)
     .eq('workspace_id', workspaceId)
     .order('full_name', { ascending: true })
-  
+
   if (error) throw error
   return data
 }

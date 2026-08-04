@@ -4,6 +4,16 @@ import { assertValidUuid, isValidHttpUrl } from '../lib/validation'
 
 type InsertFile = Database['public']['Tables']['files']['Insert']
 
+// Phase 13 Step 4 audit note: select('*') deliberately RETAINED here, not
+// narrowed. The files table has exactly 8 columns (id, workspace_id,
+// entity_type, entity_id, file_url, file_type, file_purpose, created_at)
+// -- BeautyPassport.jsx (the only consumer) only directly reads
+// file_purpose/file_url, but the remaining columns are the row's own
+// structural identity (id, workspace_id, entity_type, entity_id,
+// created_at) or minimal descriptive metadata (file_type), not optional
+// payload. There is nothing left to exclude that would meaningfully
+// narrow this query, so select('*') here is already minimal in practice.
+
 // 1. Get files attached to a specific record (e.g. entity_type='visit', entity_id=visit.id)
 export async function getFilesForEntity(entityType: string, entityId: string) {
   assertValidUuid(entityId, 'Entity id')
