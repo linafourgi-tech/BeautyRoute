@@ -105,6 +105,20 @@ describe("Appointments page", () => {
     expect(screen.getByText("confirmed")).toBeInTheDocument();
   });
 
+  it("REGRESSION: still asks the service layer for the page's own bounded range (workspaceId only) -- getAppointments() computes its rolling window internally, not something this page passes or narrows to a single day itself", async () => {
+    getAppointmentsMock.mockResolvedValue([APPT_ROW()]);
+    renderAppointments();
+    await screen.findByText("Amira Al-Fahad", {}, APPOINTMENT_CONVERGENCE_OPTIONS);
+
+    // Same call shape as before Phase 13 Step 3 -- the date window is an
+    // internal implementation detail of getAppointments() (see
+    // services/appointments.test.ts for that proof), not something this
+    // page needs to know about or pass itself, so its own call site is
+    // untouched.
+    expect(getAppointmentsMock).toHaveBeenCalledWith("ws-1");
+    expect(getAppointmentsMock).toHaveBeenCalledTimes(1);
+  });
+
   it("shows an empty state for a day with nothing booked", async () => {
     getAppointmentsMock.mockResolvedValue([]);
     renderAppointments();

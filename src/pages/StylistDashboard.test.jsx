@@ -7,7 +7,7 @@ const useSessionMock = vi.fn();
 const useWorkspaceContextMock = vi.fn();
 const useCurrentWorkspaceMock = vi.fn();
 const useSubscriptionMock = vi.fn();
-const getAppointmentsMock = vi.fn();
+const getTodaysAppointmentsMock = vi.fn();
 const getClientsMock = vi.fn();
 const getMonthlyRevenueMock = vi.fn();
 
@@ -15,7 +15,7 @@ vi.mock("../hooks/useSession", () => ({ useSession: () => useSessionMock() }));
 vi.mock("../contexts/useWorkspaceContext", () => ({ useWorkspaceContext: () => useWorkspaceContextMock() }));
 vi.mock("../hooks/useCurrentWorkspace", () => ({ useCurrentWorkspace: () => useCurrentWorkspaceMock() }));
 vi.mock("../hooks/useSubscription", () => ({ useSubscription: () => useSubscriptionMock() }));
-vi.mock("../services/appointments", () => ({ getAppointments: (...a) => getAppointmentsMock(...a) }));
+vi.mock("../services/appointments", () => ({ getTodaysAppointments: (...a) => getTodaysAppointmentsMock(...a) }));
 vi.mock("../services/clients", () => ({ getClients: (...a) => getClientsMock(...a) }));
 vi.mock("../services/revenue", () => ({ getMonthlyRevenue: (...a) => getMonthlyRevenueMock(...a) }));
 
@@ -56,7 +56,7 @@ describe("StylistDashboard page", () => {
     useWorkspaceContextMock.mockReset();
     useCurrentWorkspaceMock.mockReset();
     useSubscriptionMock.mockReset();
-    getAppointmentsMock.mockReset();
+    getTodaysAppointmentsMock.mockReset();
     getClientsMock.mockReset();
     getMonthlyRevenueMock.mockReset();
 
@@ -70,7 +70,7 @@ describe("StylistDashboard page", () => {
   });
 
   it("shows a loading title, then greets the signed-in professional by real profile data once loaded", async () => {
-    getAppointmentsMock.mockResolvedValue([]);
+    getTodaysAppointmentsMock.mockResolvedValue([]);
     getClientsMock.mockResolvedValue([]);
     renderDashboard();
 
@@ -79,24 +79,24 @@ describe("StylistDashboard page", () => {
   });
 
   it("renders today's appointments from real (mocked) service data", async () => {
-    getAppointmentsMock.mockResolvedValue([APPT_ROW()]);
+    getTodaysAppointmentsMock.mockResolvedValue([APPT_ROW()]);
     getClientsMock.mockResolvedValue([CLIENT_ROW()]);
     renderDashboard();
 
     expect(await screen.findByText(/Amira Al-Fahad/)).toBeInTheDocument();
-    expect(getAppointmentsMock).toHaveBeenCalledWith("ws-1");
+    expect(getTodaysAppointmentsMock).toHaveBeenCalledWith("ws-1");
     expect(getClientsMock).toHaveBeenCalledWith("ws-1");
   });
 
   it("shows an empty state when nothing is scheduled today", async () => {
-    getAppointmentsMock.mockResolvedValue([]);
+    getTodaysAppointmentsMock.mockResolvedValue([]);
     getClientsMock.mockResolvedValue([]);
     renderDashboard();
     expect(await screen.findByText("No visits scheduled today")).toBeInTheDocument();
   });
 
   it("shows a service-layer error state with retry instead of dashboard content", async () => {
-    getAppointmentsMock.mockRejectedValue(new Error("Couldn't reach the dashboard data."));
+    getTodaysAppointmentsMock.mockRejectedValue(new Error("Couldn't reach the dashboard data."));
     getClientsMock.mockResolvedValue([]);
     const refresh = vi.fn();
     useCurrentWorkspaceMock.mockReturnValue({ workspaceId: "ws-1", loading: false, error: null, refresh });
@@ -109,7 +109,7 @@ describe("StylistDashboard page", () => {
   });
 
   it("reflects the real client count in 'active client passports', not a fixed number", async () => {
-    getAppointmentsMock.mockResolvedValue([]);
+    getTodaysAppointmentsMock.mockResolvedValue([]);
     getClientsMock.mockResolvedValue([CLIENT_ROW({ id: "c1" }), CLIENT_ROW({ id: "c2", full_name: "Bayan Saleh" })]);
     renderDashboard();
     await waitFor(() => expect(screen.getByText("2")).toBeInTheDocument());
@@ -117,7 +117,7 @@ describe("StylistDashboard page", () => {
   });
 
   it("searches clients by name and navigates to their Beauty Passport", async () => {
-    getAppointmentsMock.mockResolvedValue([]);
+    getTodaysAppointmentsMock.mockResolvedValue([]);
     getClientsMock.mockResolvedValue([CLIENT_ROW(), CLIENT_ROW({ id: "c2", full_name: "Bayan Saleh" })]);
     const user = userEvent.setup();
     renderDashboard();
@@ -129,7 +129,7 @@ describe("StylistDashboard page", () => {
   });
 
   it("renders real monthly revenue from the service layer, workspace-scoped and currency-formatted", async () => {
-    getAppointmentsMock.mockResolvedValue([]);
+    getTodaysAppointmentsMock.mockResolvedValue([]);
     getClientsMock.mockResolvedValue([]);
     getMonthlyRevenueMock.mockResolvedValue(revenueSummary(5600));
     renderDashboard();
@@ -140,7 +140,7 @@ describe("StylistDashboard page", () => {
   });
 
   it("revenue changes when the mocked workspace revenue data changes -- not a fixed number", async () => {
-    getAppointmentsMock.mockResolvedValue([]);
+    getTodaysAppointmentsMock.mockResolvedValue([]);
     getClientsMock.mockResolvedValue([]);
     getMonthlyRevenueMock.mockResolvedValue(revenueSummary(1250));
     renderDashboard();
@@ -150,7 +150,7 @@ describe("StylistDashboard page", () => {
   });
 
   it("renders SAR 0 (a real, honest empty state) when the workspace has no revenue this month", async () => {
-    getAppointmentsMock.mockResolvedValue([]);
+    getTodaysAppointmentsMock.mockResolvedValue([]);
     getClientsMock.mockResolvedValue([]);
     getMonthlyRevenueMock.mockResolvedValue(revenueSummary(0));
     renderDashboard();
@@ -162,7 +162,7 @@ describe("StylistDashboard page", () => {
   });
 
   it("shows an honest 'Not available' state for average client rating -- never a fabricated number, since no reviews/ratings table exists yet", async () => {
-    getAppointmentsMock.mockResolvedValue([]);
+    getTodaysAppointmentsMock.mockResolvedValue([]);
     getClientsMock.mockResolvedValue([]);
     renderDashboard();
 
@@ -171,7 +171,7 @@ describe("StylistDashboard page", () => {
   });
 
   it("REGRESSION: no hardcoded business metrics remain anywhere on the dashboard", async () => {
-    getAppointmentsMock.mockResolvedValue([APPT_ROW()]);
+    getTodaysAppointmentsMock.mockResolvedValue([APPT_ROW()]);
     getClientsMock.mockResolvedValue([CLIENT_ROW(), CLIENT_ROW({ id: "c2" }), CLIENT_ROW({ id: "c3" })]);
     getMonthlyRevenueMock.mockResolvedValue(revenueSummary(9999));
     renderDashboard();
