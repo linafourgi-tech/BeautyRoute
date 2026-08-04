@@ -105,6 +105,27 @@ describe("Appointments page", () => {
     expect(screen.getByText("confirmed")).toBeInTheDocument();
   });
 
+  it("REGRESSION (Phase 13 Step 4): memoizing dayAppts does not change which appointments show for each day -- switching days still filters correctly", async () => {
+    const dayOne = APPT_ROW({ id: "a1", start_time: "2026-08-02T10:00:00.000Z", clients: { full_name: "Amira Al-Fahad" } });
+    const dayTwo = APPT_ROW({ id: "a2", start_time: "2026-08-03T09:00:00.000Z", clients: { full_name: "Bayan Saleh" } });
+    getAppointmentsMock.mockResolvedValue([dayOne, dayTwo]);
+    const user = userEvent.setup();
+    renderAppointments();
+
+    // Defaults to the earliest date's tab -- only that day's appointment shows.
+    expect(await screen.findByText("Amira Al-Fahad", {}, APPOINTMENT_CONVERGENCE_OPTIONS)).toBeInTheDocument();
+    expect(screen.queryByText("Bayan Saleh")).not.toBeInTheDocument();
+
+    // Day tabs render before the "New booking" button in DOM order, so the
+    // second button here is the second day's tab -- avoids depending on the
+    // exact locale-formatted date label text.
+    const dayTabs = screen.getAllByRole("button").filter((b) => b.textContent !== "New booking");
+    await user.click(dayTabs[1]);
+
+    expect(await screen.findByText("Bayan Saleh")).toBeInTheDocument();
+    expect(screen.queryByText("Amira Al-Fahad")).not.toBeInTheDocument();
+  });
+
   it("REGRESSION: still asks the service layer for the page's own bounded range (workspaceId only) -- getAppointments() computes its rolling window internally, not something this page passes or narrows to a single day itself", async () => {
     getAppointmentsMock.mockResolvedValue([APPT_ROW()]);
     renderAppointments();

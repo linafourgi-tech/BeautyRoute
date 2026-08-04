@@ -108,7 +108,10 @@ export default function Appointments() {
     }
   }, [dates, active]);
 
-  const dayAppts = appointments.filter((a) => a.date === active);
+  const dayAppts = useMemo(
+    () => appointments.filter((a) => a.date === active),
+    [appointments, active]
+  );
   const isLoading = workspaceLoading || loading;
   const failed = workspaceError || error;
 

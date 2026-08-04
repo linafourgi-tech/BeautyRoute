@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getWorkspaces } from "../services/workspaces";
 import { supabase } from "../lib/supabase";
 import { WorkspaceContext } from "./useWorkspaceContext";
@@ -93,8 +93,20 @@ export function WorkspaceProvider({ children }) {
 
   const workspace = workspaces.find((w) => w.id === workspaceId) ?? null;
 
+  // Phase 13 Step 4: without this, every consumer of useWorkspaceContext()
+  // (every protected page, via useCurrentWorkspace()) re-rendered whenever
+  // WorkspaceProvider re-rendered for ANY reason, even when none of these
+  // values actually changed -- a fresh object literal is a new reference
+  // every render regardless of its contents. Same fix shape already applied
+  // to SessionContext (Phase 13 Step 2). selectWorkspace/refresh are already
+  // stable (useCallback), so this only needed the value object itself.
+  const value = useMemo(
+    () => ({ workspaces, workspace, workspaceId, selectWorkspace, loading, error, refresh }),
+    [workspaces, workspace, workspaceId, selectWorkspace, loading, error, refresh]
+  );
+
   return (
-    <WorkspaceContext.Provider value={{ workspaces, workspace, workspaceId, selectWorkspace, loading, error, refresh }}>
+    <WorkspaceContext.Provider value={value}>
       {children}
     </WorkspaceContext.Provider>
   );

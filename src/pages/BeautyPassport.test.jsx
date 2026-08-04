@@ -262,4 +262,36 @@ describe("BeautyPassport page", () => {
     await screen.findByText("ok");
     expect(fetchSpy).not.toHaveBeenCalled();
   });
+
+  it("REGRESSION (Phase 13 Step 4): before/after photos still render at the same src, with the new width/height/loading attributes added for CLS/lazy-load", async () => {
+    getClientVisitHistoryMock.mockResolvedValue([
+      { id: "v1", visit_date: "2026-01-15", summary_notes: "Great cut", formula_data: {}, products_used: [], appointments: null },
+    ]);
+    getFilesForEntityMock.mockResolvedValue([
+      { id: "f1", file_purpose: "before", file_url: "https://example.com/before.jpg" },
+      { id: "f2", file_purpose: "after", file_url: "https://example.com/after.jpg" },
+    ]);
+    const user = userEvent.setup();
+    renderPassport();
+    await screen.findByRole("heading", { name: "Amira Al-Fahad" });
+
+    await user.click(await screen.findByText("15 January 2026"));
+
+    const beforeImg = await screen.findByAltText("Before");
+    const afterImg = await screen.findByAltText("After");
+
+    // Unchanged: same URLs, same visual size (CSS class untouched).
+    expect(beforeImg).toHaveAttribute("src", "https://example.com/before.jpg");
+    expect(afterImg).toHaveAttribute("src", "https://example.com/after.jpg");
+    expect(beforeImg.className).toContain("h-24 w-24");
+
+    // New: explicit dimensions (matching the CSS size exactly, so layout is
+    // unaffected) and lazy loading.
+    expect(beforeImg).toHaveAttribute("width", "96");
+    expect(beforeImg).toHaveAttribute("height", "96");
+    expect(beforeImg).toHaveAttribute("loading", "lazy");
+    expect(afterImg).toHaveAttribute("width", "96");
+    expect(afterImg).toHaveAttribute("height", "96");
+    expect(afterImg).toHaveAttribute("loading", "lazy");
+  });
 });
