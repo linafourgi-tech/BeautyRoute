@@ -4,17 +4,13 @@ import { ArrowUpRight, MapPin, Clock, Search, Navigation, Fuel, X } from "lucide
 import Layout from "../components/Layout";
 import { useSession } from "../hooks/useSession";
 import { useCurrentWorkspace } from "../hooks/useCurrentWorkspace";
-import { getAppointments } from "../services/appointments";
+import { getTodaysAppointments } from "../services/appointments";
 import { getClients } from "../services/clients";
 import { getMonthlyRevenue } from "../services/revenue";
 import { toAppointmentViewModel } from "../lib/appointmentView";
 import { Skeleton, EmptyState } from "../components/ui";
 import { ErrorState } from "../components/ErrorState";
 import "../styles/beautyroute/styles.css";
-
-function todayISODate() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 // clients table has no photo/avatar column — explicit placeholder, not fabricated.
 function toClientViewModel(row) {
@@ -62,7 +58,7 @@ export default function StylistDashboard() {
 
       try {
         const [appointmentRows, clientRows, revenueSummary] = await Promise.all([
-          getAppointments(workspaceId),
+          getTodaysAppointments(workspaceId),
           getClients(workspaceId),
           getMonthlyRevenue(workspaceId),
         ]);
@@ -88,12 +84,14 @@ export default function StylistDashboard() {
     setReloadToken((t) => t + 1);
   }
 
-  const todays = useMemo(() => {
-    const today = todayISODate();
-    return appointments
-      .filter((a) => a.date === today)
-      .sort((a, b) => a.time.localeCompare(b.time));
-  }, [appointments]);
+  // appointments is already scoped to today only (getTodaysAppointments()
+  // filters server-side -- see services/appointments.ts), so this just
+  // orders what's already the correct set; no client-side date filter
+  // needed anymore.
+  const todays = useMemo(
+    () => [...appointments].sort((a, b) => a.time.localeCompare(b.time)),
+    [appointments]
+  );
 
   const totalTravelMin = todays.reduce((s, a) => s + a.travelMinFromPrev, 0);
   const totalDistanceKm = todays.reduce((s, a) => s + a.distanceKmFromPrev, 0);

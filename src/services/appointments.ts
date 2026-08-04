@@ -4,8 +4,34 @@ import { Database } from '../lib/supabase-types'
 type InsertAppointment = Database['public']['Tables']['appointments']['Insert']
 type UpdateAppointment = Database['public']['Tables']['appointments']['Update']
 
-// 1. Get all appointments for a salon with client and booked-service details attached
+// Phase 13 Step 3: how far back/forward the Appointments page's day-tabs
+// look, instead of loading a workspace's entire appointment history just to
+// populate a handful of day tabs. Deliberately generous in both directions
+// -- this app has no real usage history yet (pre-launch), so there's
+// nothing currently relied upon that a tighter window could silently hide;
+// 90 days back covers "recent history" review, 180 days forward covers
+// even a far-out booking (e.g. a wedding booked a season ahead). This
+// bounds the query (the actual scalability concern -- unbounded growth
+// across a workspace's entire multi-year lifetime) without materially
+// changing what any realistic current booking pattern shows. Revisit this
+// window if real usage ever needs a wider range -- see
+// docs/quality/PHASE_13_STEP_3... (Performance report) for the full
+// reasoning.
+const APPOINTMENTS_WINDOW_DAYS_PAST = 90
+const APPOINTMENTS_WINDOW_DAYS_FUTURE = 180
+const ONE_DAY_MS = 24 * 60 * 60 * 1000
+
+// 1. Get appointments for a salon with client and booked-service details
+// attached, bounded to a rolling window around today (see
+// APPOINTMENTS_WINDOW_DAYS_PAST/FUTURE above) rather than the workspace's
+// entire history. Uses the existing idx_appointments_time_window
+// (workspace_id, start_time, end_time) index via the workspace_id +
+// start_time-range filter below.
 export async function getAppointments(workspaceId: string) {
+  const now = Date.now()
+  const windowStart = new Date(now - APPOINTMENTS_WINDOW_DAYS_PAST * ONE_DAY_MS).toISOString()
+  const windowEnd = new Date(now + APPOINTMENTS_WINDOW_DAYS_FUTURE * ONE_DAY_MS).toISOString()
+
   const { data, error } = await supabase
     .from('appointments')
     .select(`
@@ -27,6 +53,51 @@ export async function getAppointments(workspaceId: string) {
       )
     `)
     .eq('workspace_id', workspaceId)
+    .gte('start_time', windowStart)
+    .lt('start_time', windowEnd)
+    .order('start_time', { ascending: true })
+
+  if (error) throw error
+  return data
+}
+
+// 1a. Get ONLY today's appointments for a salon -- used by the dashboard,
+// which only ever displays "today's route," not the workspace's history.
+// Bounded to a single UTC calendar day, matching this app's existing
+// "today" semantics exactly (see lib/appointmentView.js's date derivation,
+// also UTC-based via ISO-string slicing) -- not workspace-timezone-aware,
+// which preserves the dashboard's prior client-side-filtered behavior
+// exactly rather than silently changing what counts as "today" for a
+// non-UTC workspace. Uses the same idx_appointments_time_window index as
+// getAppointments() above.
+export async function getTodaysAppointments(workspaceId: string) {
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const startOfDay = `${todayStr}T00:00:00.000Z`
+  const endOfDay = new Date(new Date(startOfDay).getTime() + ONE_DAY_MS).toISOString()
+
+  const { data, error } = await supabase
+    .from('appointments')
+    .select(`
+      *,
+      clients (
+        id,
+        full_name,
+        email,
+        phone
+      ),
+      appointment_services (
+        custom_price,
+        services (
+          id,
+          name,
+          price,
+          duration_minutes
+        )
+      )
+    `)
+    .eq('workspace_id', workspaceId)
+    .gte('start_time', startOfDay)
+    .lt('start_time', endOfDay)
     .order('start_time', { ascending: true })
 
   if (error) throw error
