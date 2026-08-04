@@ -46,6 +46,23 @@ const APPT_ROW = (overrides = {}) => ({
   ...overrides,
 });
 
+// Appointments.jsx resolves its initial "active day" in a SEPARATE render
+// pass from the data fetch itself: a useEffect derives `dates` from the
+// freshly-fetched appointments, then a second useEffect sets `active` to
+// dates[0] once dates is non-empty. Until that second effect fires,
+// `dayAppts` (filtered by `active`, still null) is empty, so the UI
+// genuinely renders "Nothing booked yet" for one transient render before
+// the real list appears -- not a bug (real users see this converge in
+// milliseconds), but it means finding a client's name shortly after mount
+// depends on two render passes converging, not one. That normally
+// completes well within testing-library's default 1000ms findBy timeout,
+// but can occasionally exceed it under load (e.g. CI running many test
+// files/workers at once), causing a false failure on an otherwise-correct
+// render. Traced during the Phase 13 Step 2 CI investigation. This widens
+// the search window for exactly that convergence, not a blanket timeout
+// increase -- component logic itself is untouched.
+const APPOINTMENT_CONVERGENCE_OPTIONS = { timeout: 3000 };
+
 const CLIENTS = [{ id: "c1", full_name: "Amira Al-Fahad" }];
 const SERVICES = [{ id: "s1", name: "Haircut", duration_minutes: 45, is_active: true }];
 
@@ -83,7 +100,7 @@ describe("Appointments page", () => {
     getAppointmentsMock.mockResolvedValue([APPT_ROW()]);
     renderAppointments();
 
-    expect(await screen.findByText("Amira Al-Fahad")).toBeInTheDocument();
+    expect(await screen.findByText("Amira Al-Fahad", {}, APPOINTMENT_CONVERGENCE_OPTIONS)).toBeInTheDocument();
     expect(screen.getByText("Haircut")).toBeInTheDocument();
     expect(screen.getByText("confirmed")).toBeInTheDocument();
   });
@@ -117,7 +134,7 @@ describe("Appointments page", () => {
     getAppointmentsMock.mockResolvedValue([APPT_ROW()]);
     const user = userEvent.setup();
     renderAppointments();
-    await screen.findByText("Amira Al-Fahad");
+    await screen.findByText("Amira Al-Fahad", {}, APPOINTMENT_CONVERGENCE_OPTIONS);
 
     await user.click(screen.getByText("Amira Al-Fahad"));
     const modalHeading = await screen.findByText("Edit booking");
@@ -220,7 +237,7 @@ describe("Appointments page", () => {
     updateAppointmentMock.mockResolvedValue({});
     const user = userEvent.setup();
     renderAppointments();
-    await screen.findByText("Amira Al-Fahad");
+    await screen.findByText("Amira Al-Fahad", {}, APPOINTMENT_CONVERGENCE_OPTIONS);
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     await user.click(screen.getByRole("button", { name: "Cancel booking" }));
@@ -232,7 +249,7 @@ describe("Appointments page", () => {
   it("hides the Cancel action for an appointment that is already cancelled", async () => {
     getAppointmentsMock.mockResolvedValue([APPT_ROW({ status: "cancelled" })]);
     renderAppointments();
-    await screen.findByText("Amira Al-Fahad");
+    await screen.findByText("Amira Al-Fahad", {}, APPOINTMENT_CONVERGENCE_OPTIONS);
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
   });
 
@@ -241,7 +258,7 @@ describe("Appointments page", () => {
     deleteAppointmentMock.mockResolvedValue(undefined);
     const user = userEvent.setup();
     renderAppointments();
-    await screen.findByText("Amira Al-Fahad");
+    await screen.findByText("Amira Al-Fahad", {}, APPOINTMENT_CONVERGENCE_OPTIONS);
 
     await user.click(screen.getByRole("button", { name: "Delete" }));
     const confirmCard = screen.getByText("Delete this appointment?").parentElement;
