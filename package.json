@@ -13,7 +13,8 @@
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
     "security:secret-scan": "bash scripts/secret-scan.sh",
-    "security:dependency-audit": "node scripts/dependency-audit.mjs"
+    "security:dependency-audit": "node scripts/dependency-audit.mjs",
+    "perf:bundle-budget": "node scripts/bundle-budget.mjs dist"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.8",
