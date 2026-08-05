@@ -57,6 +57,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Bundle budget (Phase 13 Step 6 -- deterministic, local script, no external upload)
+        run: npm run perf:bundle-budget
+
   edge-functions:
     name: Edge Function tests (Deno)
     runs-on: ubuntu-latest
