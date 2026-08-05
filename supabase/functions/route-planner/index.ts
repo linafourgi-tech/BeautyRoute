@@ -143,6 +143,98 @@ class MapboxError extends Error {
   }
 }
 
+// ---- Bounded-concurrency geocoding -------------------------------------------------
+// A route's independent geocoding lookups (each appointment's unique
+// address, plus the optional start/end location) don't depend on each
+// other's results, so there's no correctness reason to resolve them one at
+// a time the way the previous sequential `for...of` loop did. Running them
+// fully unbounded (a single Promise.all across every address) isn't safe
+// either -- concurrent requests to Mapbox would scale linearly with a
+// route's stop count, up to MAX_STOPS+2 at once, which is exactly the kind
+// of provider-abuse-risk increase this optimization must avoid. This caps
+// how many geocode requests are ever in flight at once, no matter how many
+// stops the route has.
+//
+// GEOCODE_CONCURRENCY = 5: a typical route (5-10 stops) still geocodes in
+// 1-2 concurrency "waves" (most of the latency win over one-at-a-time),
+// while a maximal route (23 stops + start/end = 25 lookups) only ever puts
+// 5 concurrent requests on Mapbox at once -- a small, fixed multiple of the
+// old sequential behavior's "1 at a time", never a 25x spike. See the
+// Step 5 performance report for the exact critical-path math at 5/10/23
+// stops.
+const GEOCODE_CONCURRENCY = 5;
+
+// Runs `tasks` with at most `limit` running concurrently, preserving each
+// task's result at its original index regardless of completion order (a
+// small worker-pool: each of up to `limit` workers pulls the next
+// not-yet-started index until none remain). If any task throws, that
+// rejection propagates out of the returned promise via Promise.all below --
+// this intentionally does NOT isolate or swallow individual failures, so a
+// single provider error still aborts the whole batch exactly as a throw
+// from inside the old sequential loop would have. geocodeAddress() itself
+// only ever throws on a genuine provider error, never on an unresolved
+// address (that's represented as `null`), so this doesn't change what
+// counts as a "failure".
+async function runWithConcurrency<T>(tasks: Array<() => Promise<T>>, limit: number): Promise<T[]> {
+  const results: T[] = new Array(tasks.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < tasks.length) {
+      const index = cursor++;
+      results[index] = await tasks[index]();
+    }
+  }
+  const workerCount = Math.min(limit, tasks.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
+}
+
+type GeocodeBatchResult = { byAddress: Map<string, LatLng | null>; start: LatLng | null; end: LatLng | null };
+
+// Geocodes every unique stop address plus the optional start/end location
+// in one bounded-concurrency batch (see GEOCODE_CONCURRENCY above), reused
+// identically by both the `plan` and `reroute` actions. `stops` supplies
+// the rows to dedupe and geocode -- same dedup-by-lowercased-address
+// behavior as the previous per-action loops. Start and end are tracked
+// separately from stop addresses (their own map keys, never merged into
+// `byAddress`), so an incidental string match between a start/end location
+// and one of the stop addresses is still geocoded as two independent
+// lookups -- unlike stop-to-stop duplicates, which are (and always were)
+// deliberately deduplicated by address.
+async function geocodeBatch(
+  stops: Array<{ address: string }>,
+  startLocation: string,
+  endLocation: string,
+  token: string,
+): Promise<GeocodeBatchResult> {
+  const uniqueAddresses = [...new Set(stops.map((s) => s.address.toLowerCase()))];
+  const originalByLower = new Map(uniqueAddresses.map((lower) => [lower, stops.find((s) => s.address.toLowerCase() === lower)!.address]));
+
+  type Task = { kind: "stop"; key: string } | { kind: "start" } | { kind: "end" };
+  const plan: Task[] = uniqueAddresses.map((key) => ({ kind: "stop", key }));
+  if (startLocation) plan.push({ kind: "start" });
+  if (endLocation) plan.push({ kind: "end" });
+
+  const taskFns = plan.map((task) => {
+    if (task.kind === "stop") return () => geocodeAddress(originalByLower.get(task.key)!, token);
+    if (task.kind === "start") return () => geocodeAddress(startLocation, token);
+    return () => geocodeAddress(endLocation, token);
+  });
+
+  const results = await runWithConcurrency(taskFns, GEOCODE_CONCURRENCY);
+
+  const byAddress = new Map<string, LatLng | null>();
+  let start: LatLng | null = null;
+  let end: LatLng | null = null;
+  plan.forEach((task, i) => {
+    if (task.kind === "stop") byAddress.set(task.key, results[i]);
+    else if (task.kind === "start") start = results[i];
+    else end = results[i];
+  });
+
+  return { byAddress, start, end };
+}
+
 // ---- Feasibility check -------------------------------------------------
 // Assumes the professional arrives on time for the FIRST stop (nothing to
 // check there -- that's their own departure-time planning, which this
@@ -316,36 +408,26 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === "plan") {
-      // Geocode unique addresses once each, reused across appointments that
-      // share the exact same address string (dedup within this request --
-      // no cross-request cache exists, see the Phase 12 report).
-      const uniqueAddresses = [...new Set(routeable.map((r) => r.address.toLowerCase()))];
-      const geocodeResults = new Map<string, LatLng | null>();
-      for (const addr of uniqueAddresses) {
-        const original = routeable.find((r) => r.address.toLowerCase() === addr)!.address;
-        geocodeResults.set(addr, await geocodeAddress(original, mapboxToken));
-      }
+      // Geocode every unique stop address plus the optional start/end
+      // location together, in one bounded-concurrency batch (see
+      // GEOCODE_CONCURRENCY / geocodeBatch above) -- dedup within this
+      // request is unchanged (no cross-request cache exists, see the
+      // Phase 12 report); only the scheduling of these independent
+      // requests changed, from one-at-a-time to concurrency-capped.
+      const geocoded = await geocodeBatch(routeable, startLocation, endLocation, mapboxToken);
 
       const resolved: Array<{ id: string; clientName: string; address: string; startTimeMs: number; durationMinutes: number; status: string; lat: number; lng: number }> = [];
       const unresolved: Array<{ id: string; clientName: string; address: string; startTimeMs: number; status: string }> = [];
       for (const r of routeable) {
-        const coords = geocodeResults.get(r.address.toLowerCase());
+        const coords = geocoded.byAddress.get(r.address.toLowerCase());
         if (coords) resolved.push({ ...r, ...coords });
         else unresolved.push({ id: r.id, clientName: r.clientName, address: r.address, startTimeMs: r.startTimeMs, status: r.status });
       }
 
-      let startCoords: LatLng | null = null;
-      let startUnresolved = false;
-      if (startLocation) {
-        startCoords = await geocodeAddress(startLocation, mapboxToken);
-        if (!startCoords) startUnresolved = true;
-      }
-      let endCoords: LatLng | null = null;
-      let endUnresolved = false;
-      if (endLocation) {
-        endCoords = await geocodeAddress(endLocation, mapboxToken);
-        if (!endCoords) endUnresolved = true;
-      }
+      const startCoords = geocoded.start;
+      const startUnresolved = Boolean(startLocation) && !startCoords;
+      const endCoords = geocoded.end;
+      const endUnresolved = Boolean(endLocation) && !endCoords;
 
       resolved.sort((a, b) => a.startTimeMs - b.startTimeMs);
 
@@ -407,21 +489,17 @@ Deno.serve(async (req: Request) => {
     const byId = new Map(routeable.map((r) => [r.id, r]));
     const orderedStops = requestedOrder.map((id) => byId.get(id)!);
 
-    const uniqueAddresses = [...new Set(orderedStops.map((r) => r.address.toLowerCase()))];
-    const geocodeResults = new Map<string, LatLng | null>();
-    for (const addr of uniqueAddresses) {
-      const original = orderedStops.find((r) => r.address.toLowerCase() === addr)!.address;
-      geocodeResults.set(addr, await geocodeAddress(original, mapboxToken));
-    }
-    const withCoords = orderedStops.map((r) => ({ ...r, coords: geocodeResults.get(r.address.toLowerCase()) }));
+    // Same bounded-concurrency batch as `plan` above -- unique stop
+    // addresses plus optional start/end, geocoded together instead of
+    // sequentially.
+    const geocoded = await geocodeBatch(orderedStops, startLocation, endLocation, mapboxToken);
+    const withCoords = orderedStops.map((r) => ({ ...r, coords: geocoded.byAddress.get(r.address.toLowerCase()) }));
     if (withCoords.some((r) => !r.coords)) {
       return safeError(422, "unresolved_in_order", "One or more stops in this order no longer resolve to a valid address. Please reload the route.");
     }
 
-    let startCoords: LatLng | null = null;
-    if (startLocation) startCoords = await geocodeAddress(startLocation, mapboxToken);
-    let endCoords: LatLng | null = null;
-    if (endLocation) endCoords = await geocodeAddress(endLocation, mapboxToken);
+    const startCoords = geocoded.start;
+    const endCoords = geocoded.end;
 
     const points: LatLng[] = [...(startCoords ? [startCoords] : []), ...withCoords.map((r) => r.coords as LatLng), ...(endCoords ? [endCoords] : [])];
     if (points.length < 2) return safeError(400, "not_enough_stops", "At least two locations are needed to calculate a route.");
