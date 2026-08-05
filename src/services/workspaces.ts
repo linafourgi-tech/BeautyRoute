@@ -22,11 +22,21 @@ const UPDATABLE_WORKSPACE_FIELDS = [
   'business_type',
 ] as const
 
+// Phase 13 Step 4: narrowed from select('*') after a systematic search of
+// every .jsx consumer of the shared `workspace` value (WorkspaceContext,
+// Sidebar's workspace switcher, RouteEngine, AIEngine) -- only id, name,
+// and display_brand are ever read. plan_tier/subscription_status/
+// trial_ends_at are read from a SEPARATE getSubscription() query, never
+// from this row. getWorkspaceById() below is left as select('*')
+// deliberately: it has no current caller anywhere in the app (confirmed),
+// so there's nothing to verify a narrower column list against.
+const WORKSPACE_LIST_COLUMNS = 'id, name, display_brand'
+
 // 1. Get all workspaces owned by the logged-in user
 export async function getWorkspaces() {
   const { data, error } = await supabase
     .from('workspaces')
-    .select('*')
+    .select(WORKSPACE_LIST_COLUMNS)
 
   if (error) throw error
   return data

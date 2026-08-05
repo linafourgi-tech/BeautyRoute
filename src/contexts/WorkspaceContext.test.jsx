@@ -141,6 +141,17 @@ describe("useWorkspaceContext / WorkspaceProvider", () => {
     await waitFor(() => expect(result.current.workspaceId).toBe("ws-1"));
     expect(getWorkspacesMock).toHaveBeenCalledTimes(2);
   });
+
+  it("REGRESSION (Phase 13 Step 4): the context value is memoized -- unchanged fields keep the same object identity across an unrelated re-render", async () => {
+    getWorkspacesMock.mockResolvedValue([{ id: "ws-1", name: "Jane's Salon" }]);
+
+    const { result, rerender } = renderHook(() => useWorkspaceContext(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const firstValue = result.current;
+    rerender();
+    expect(result.current).toBe(firstValue);
+  });
 });
 
 describe("useCurrentWorkspace (thin wrapper over useWorkspaceContext)", () => {
