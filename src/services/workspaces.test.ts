@@ -9,7 +9,7 @@ vi.mock("../lib/supabase", () => ({
   },
 }));
 
-import { deleteWorkspace, getWorkspaceById, updateWorkspace, updateWorkspaceSettings } from "./workspaces";
+import { deleteWorkspace, getWorkspaceById, getWorkspaces, updateWorkspace, updateWorkspaceSettings } from "./workspaces";
 
 const WORKSPACE_ID = "11111111-1111-1111-1111-111111111111";
 const OTHER_WORKSPACE_ID = "22222222-2222-2222-2222-222222222222";
@@ -158,5 +158,34 @@ describe("updateWorkspaceSettings", () => {
       "updateWorkspaceSettings: field(s) not allowed: workspace_id"
     );
     expect(fromMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("getWorkspaces (Phase 13 Step 4: narrowed select)", () => {
+  beforeEach(() => {
+    fromMock.mockReset();
+  });
+
+  it("REGRESSION: requests every column current consumers actually read -- WorkspaceContext, Sidebar's workspace switcher, RouteEngine, AIEngine need only id, name, display_brand (plan/subscription fields come from a separate getSubscription() query, never this row)", async () => {
+    const select = vi.fn().mockResolvedValue({ data: [], error: null });
+    fromMock.mockReturnValue({ select });
+
+    await getWorkspaces();
+
+    const [selectArg] = select.mock.calls[0];
+    const requestedColumns = String(selectArg)
+      .split(",")
+      .map((c) => c.trim());
+    for (const field of ["id", "name", "display_brand"]) {
+      expect(requestedColumns, `missing required field: ${field}`).toContain(field);
+    }
+    expect(selectArg).not.toBe("*");
+  });
+
+  it("propagates a Supabase error instead of swallowing it", async () => {
+    const select = vi.fn().mockResolvedValue({ data: null, error: new Error("connection lost") });
+    fromMock.mockReturnValue({ select });
+
+    await expect(getWorkspaces()).rejects.toThrow("connection lost");
   });
 });

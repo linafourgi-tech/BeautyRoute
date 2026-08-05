@@ -44,6 +44,22 @@ describe("getProfile", () => {
     expect(chain.eq).toHaveBeenCalledWith("id", VALID_ID);
     expect(result).toEqual({ id: VALID_ID, full_name: "Sara" });
   });
+
+  it("REGRESSION (Phase 13 Step 4): requests every field current consumers read -- useSession()/SessionContext and Login.jsx need full_name, phone, avatar_url, onboarding_completed", async () => {
+    const chain = buildSelectChain({ data: {}, error: null });
+    fromMock.mockReturnValue({ select: chain.select });
+
+    await getProfile(VALID_ID);
+
+    const [selectArg] = chain.select.mock.calls[0];
+    const requestedColumns = String(selectArg)
+      .split(",")
+      .map((c) => c.trim());
+    for (const field of ["id", "full_name", "phone", "avatar_url", "onboarding_completed"]) {
+      expect(requestedColumns, `missing required field: ${field}`).toContain(field);
+    }
+    expect(selectArg).not.toBe("*");
+  });
 });
 
 describe("updateProfile", () => {

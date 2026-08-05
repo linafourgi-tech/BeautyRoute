@@ -3,12 +3,22 @@ import { assertAllowedFields, assertValidUuid, isValidHttpUrl, trimIfString } fr
 
 const UPDATABLE_PROFILE_FIELDS = ['full_name', 'phone', 'avatar_url'] as const
 
+// Phase 13 Step 4: narrowed from select('*') after verifying every current
+// consumer (useSession()/SessionContext, Login.jsx) -- only full_name,
+// phone, and onboarding_completed are ever read; avatar_url is kept
+// deliberately even though nothing displays it yet (it's a real,
+// recently-hardened settable field -- see updateProfile()'s validation --
+// not dead/vestigial, so excluding it would be a speculative guess, not a
+// verified narrowing). role/created_at/updated_at are confirmed unread
+// anywhere in the frontend.
+const PROFILE_COLUMNS = 'id, full_name, phone, avatar_url, onboarding_completed'
+
 // 1. Get a single profile by id
 export async function getProfile(id: string) {
   assertValidUuid(id, 'Profile id')
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select(PROFILE_COLUMNS)
     .eq('id', id)
     .single()
 
