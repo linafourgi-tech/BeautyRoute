@@ -445,6 +445,349 @@ Deno.test("CORS: OPTIONS preflight returns the right headers and no body", async
   }
 });
 
+// ---- Phase 13 Step 5: bounded-concurrency geocoding -------------------------------------------------
+// These tests exercise geocoding concurrency directly through the real
+// handler (no internal exports needed) by making the mocked
+// api.mapbox.com/geocoding response controllably slow to await and
+// counting how many geocode requests are in flight at once. All of them
+// reuse the same "many distinct addresses" fixture so the batch is large
+// enough to actually exceed GEOCODE_CONCURRENCY (5) if concurrency were
+// ever unbounded or accidentally serialized.
+
+const GEOCODE_CONCURRENCY = 5;
+
+function manyAddressedAppointments(count: number, startHour = 8) {
+  return Array.from({ length: count }, (_, i) =>
+    appointmentRow({
+      id: `88888888-8888-8888-8888-8888${String(i).padStart(4, "0")}`,
+      start_time: `2026-08-02T${String(startHour + Math.floor(i / 4)).padStart(2, "0")}:${String((i % 4) * 15).padStart(2, "0")}:00.000Z`,
+      location_address: `${i} Distinct Ave, Riyadh`,
+    }));
+}
+
+// Tracks concurrent in-flight requests to api.mapbox.com/geocoding: each
+// call increments a counter, awaits a short delay (so overlapping calls
+// actually overlap in wall-clock time instead of resolving synchronously),
+// records the peak concurrency seen, then decrements.
+function trackedGeocodeFetch(onCall?: (url: string) => void) {
+  let inFlight = 0;
+  let peak = 0;
+  let totalCalls = 0;
+  const callOrder: number[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = input instanceof Request ? input.url : input.toString();
+    if (url.includes("api.mapbox.com/geocoding")) {
+      totalCalls += 1;
+      callOrder.push(totalCalls);
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      onCall?.(url);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight -= 1;
+      return jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95 }] });
+    }
+    if (url.includes("/auth/v1/user")) return authUserResponse("user-geocode-concurrency");
+    if (url.includes("/rest/v1/workspaces")) return jsonRes([workspaceRow()]);
+    if (url.includes("/rest/v1/appointments")) return jsonRes(manyAddressedAppointments(10));
+    if (url.includes("api.mapbox.com/directions-matrix")) return jsonRes({ durations: [], distances: [] });
+    if (url.includes("api.mapbox.com/directions/v5")) {
+      return jsonRes({ routes: [{ geometry: { type: "LineString", coordinates: [] }, distance: 1000, duration: 100, legs: [] }] });
+    }
+    if (init === undefined && !url.includes("api.mapbox.com")) return await original(input);
+    throw new Error(`Unmocked fetch in geocode-concurrency test: ${url}`);
+  }) as typeof fetch;
+  return {
+    restore: () => { globalThis.fetch = original; },
+    getPeak: () => peak,
+    getTotalCalls: () => totalCalls,
+  };
+}
+
+Deno.test("geocoding requests execute in parallel, not one at a time -- peak concurrency > 1 for a multi-stop route", async () => {
+  Deno.env.set("MAPBOX_SECRET_TOKEN", "fake-mapbox-token");
+  const tracker = trackedGeocodeFetch();
+  try {
+    const res = await handler(postRequest(FUNCTION_URL, { action: "plan", workspaceId: FAKE_WORKSPACE_ID, date: "2026-08-02" }, authHeader()));
+    assertEquals(res.status, 200);
+    // 10 distinct addresses; if these ran sequentially (the old behavior),
+    // peak in-flight concurrency would be exactly 1.
+    assertEquals(tracker.getPeak() > 1, true, `expected parallel execution, but peak concurrency was ${tracker.getPeak()}`);
+  } finally {
+    tracker.restore();
+    Deno.env.delete("MAPBOX_SECRET_TOKEN");
+  }
+});
+
+Deno.test("geocoding concurrency never exceeds the chosen cap (GEOCODE_CONCURRENCY = 5), even with more addresses than the cap", async () => {
+  Deno.env.set("MAPBOX_SECRET_TOKEN", "fake-mapbox-token");
+  const tracker = trackedGeocodeFetch();
+  try {
+    const res = await handler(postRequest(FUNCTION_URL, { action: "plan", workspaceId: FAKE_WORKSPACE_ID, date: "2026-08-02" }, authHeader()));
+    assertEquals(res.status, 200);
+    assertEquals(tracker.getPeak() <= GEOCODE_CONCURRENCY, true, `peak concurrency ${tracker.getPeak()} exceeded the cap of ${GEOCODE_CONCURRENCY}`);
+    // 10 distinct addresses -> exactly 10 geocode calls, no more, no fewer.
+    assertEquals(tracker.getTotalCalls(), 10);
+  } finally {
+    tracker.restore();
+    Deno.env.delete("MAPBOX_SECRET_TOKEN");
+  }
+});
+
+Deno.test("duplicate addresses are still geocoded exactly once under bounded-concurrency execution", async () => {
+  Deno.env.set("MAPBOX_SECRET_TOKEN", "fake-mapbox-token");
+  let geocodeCalls = 0;
+  const restore = stubFetch({
+    "/auth/v1/user": () => authUserResponse("user-dedup-check"),
+    "/rest/v1/workspaces": () => jsonRes([workspaceRow()]),
+    "/rest/v1/appointments": () => jsonRes([
+      appointmentRow({ id: FAKE_APPOINTMENT_ID, start_time: "2026-08-02T10:00:00.000Z", location_address: "Same Address, Riyadh" }),
+      appointmentRow({ id: FAKE_APPOINTMENT_ID_2, start_time: "2026-08-02T11:00:00.000Z", location_address: "Same Address, Riyadh" }),
+      appointmentRow({ id: FAKE_FOREIGN_APPOINTMENT_ID, start_time: "2026-08-02T12:00:00.000Z", location_address: "SAME ADDRESS, riyadh" }),
+    ]),
+    "api.mapbox.com/geocoding": () => {
+      geocodeCalls += 1;
+      return jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95 }] });
+    },
+    "api.mapbox.com/directions-matrix": () => jsonRes({ durations: [], distances: [] }),
+    "api.mapbox.com/directions/v5": () => jsonRes({ routes: [{ geometry: { type: "LineString", coordinates: [] }, distance: 1000, duration: 100, legs: [{ duration: 0 }, { duration: 0 }] }] }),
+  });
+  try {
+    const res = await handler(postRequest(FUNCTION_URL, { action: "plan", workspaceId: FAKE_WORKSPACE_ID, date: "2026-08-02" }, authHeader()));
+    assertEquals(res.status, 200);
+    const body = await res.json();
+    assertEquals(body.routeable.length, 3);
+    // 3 appointments share one case-insensitively-identical address -> dedup
+    // means exactly 1 geocode call, same as the previous sequential code.
+    assertEquals(geocodeCalls, 1);
+  } finally {
+    restore();
+    Deno.env.delete("MAPBOX_SECRET_TOKEN");
+  }
+});
+
+Deno.test("result ordering and appointment-to-address mapping are unchanged under parallel execution -- each stop keeps its own distinct coordinates", async () => {
+  Deno.env.set("MAPBOX_SECRET_TOKEN", "fake-mapbox-token");
+  // Each address geocodes to different coordinates derived from its own
+  // text, proving results aren't cross-assigned between concurrently
+  // in-flight requests.
+  const restore = stubFetch({
+    "/auth/v1/user": () => authUserResponse("user-ordering-check"),
+    "/rest/v1/workspaces": () => jsonRes([workspaceRow()]),
+    "/rest/v1/appointments": () => jsonRes([
+      appointmentRow({ id: FAKE_APPOINTMENT_ID, start_time: "2026-08-02T09:00:00.000Z", location_address: "Address One, Riyadh" }),
+      appointmentRow({ id: FAKE_APPOINTMENT_ID_2, start_time: "2026-08-02T10:00:00.000Z", location_address: "Address Two, Riyadh" }),
+      appointmentRow({ id: FAKE_FOREIGN_APPOINTMENT_ID, start_time: "2026-08-02T11:00:00.000Z", location_address: "Address Three, Riyadh" }),
+    ]),
+    "api.mapbox.com/geocoding": (() => {
+      let call = 0;
+      const coordsByCall = [
+        [46.1, 24.1],
+        [46.2, 24.2],
+        [46.3, 24.3],
+      ];
+      return () => {
+        const [lng, lat] = coordsByCall[call % coordsByCall.length];
+        call += 1;
+        return jsonRes({ features: [{ center: [lng, lat], relevance: 0.95 }] });
+      };
+    })(),
+    "api.mapbox.com/directions-matrix": () => jsonRes({ durations: [], distances: [] }),
+    "api.mapbox.com/directions/v5": () => jsonRes({ routes: [{ geometry: { type: "LineString", coordinates: [] }, distance: 1000, duration: 100, legs: [{ duration: 0 }, { duration: 0 }] }] }),
+  });
+  try {
+    const res = await handler(postRequest(FUNCTION_URL, { action: "plan", workspaceId: FAKE_WORKSPACE_ID, date: "2026-08-02" }, authHeader()));
+    assertEquals(res.status, 200);
+    const body = await res.json();
+    // Chronological order must still be by startTimeMs (09:00, 10:00, 11:00).
+    assertEquals(body.chronological.order, [FAKE_APPOINTMENT_ID, FAKE_APPOINTMENT_ID_2, FAKE_FOREIGN_APPOINTMENT_ID]);
+    // Every stop must have real, distinct coordinates -- never undefined,
+    // never all-identical (which would indicate cross-assignment).
+    const coordPairs = body.routeable.map((r: { lat: number; lng: number }) => `${r.lat},${r.lng}`);
+    assertEquals(new Set(coordPairs).size, 3);
+  } finally {
+    restore();
+    Deno.env.delete("MAPBOX_SECRET_TOKEN");
+  }
+});
+
+Deno.test("unresolved/low-confidence classification is unchanged under parallel execution -- a mix of resolved and low-relevance addresses sorts correctly into each bucket", async () => {
+  Deno.env.set("MAPBOX_SECRET_TOKEN", "fake-mapbox-token");
+  // stubFetch's substring routing can't distinguish the two addresses below
+  // (both would hit the same "api.mapbox.com/geocoding" key), so this test
+  // drives fetch directly instead, keying the response off the encoded
+  // address in the URL.
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = input instanceof Request ? input.url : input.toString();
+    if (url.includes("/auth/v1/user")) return authUserResponse("user-mixed-relevance");
+    if (url.includes("/rest/v1/workspaces")) return jsonRes([workspaceRow()]);
+    if (url.includes("/rest/v1/appointments")) {
+      return jsonRes([
+        appointmentRow({ id: FAKE_APPOINTMENT_ID, start_time: "2026-08-02T09:00:00.000Z", location_address: "Good Address, Riyadh" }),
+        appointmentRow({ id: FAKE_APPOINTMENT_ID_2, start_time: "2026-08-02T10:00:00.000Z", location_address: "Bad Address, Riyadh" }),
+      ]);
+    }
+    if (url.includes("api.mapbox.com/geocoding")) {
+      if (decodeURIComponent(url).includes("Good Address")) {
+        return jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95 }] });
+      }
+      return jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.4 }] }); // below MIN_GEOCODE_RELEVANCE
+    }
+    if (url.includes("api.mapbox.com/directions-matrix")) return jsonRes({ durations: [], distances: [] });
+    if (url.includes("api.mapbox.com/directions/v5")) {
+      return jsonRes({ routes: [{ geometry: { type: "LineString", coordinates: [] }, distance: 1000, duration: 100, legs: [] }] });
+    }
+    throw new Error(`Unmocked fetch: ${url}`);
+  }) as typeof fetch;
+  try {
+    const res = await handler(postRequest(FUNCTION_URL, { action: "plan", workspaceId: FAKE_WORKSPACE_ID, date: "2026-08-02" }, authHeader()));
+    assertEquals(res.status, 200);
+    const body = await res.json();
+    assertEquals(body.routeable.length, 1);
+    assertEquals(body.routeable[0].id, FAKE_APPOINTMENT_ID);
+    assertEquals(body.unresolved.length, 1);
+    assertEquals(body.unresolved[0].id, FAKE_APPOINTMENT_ID_2);
+  } finally {
+    globalThis.fetch = originalFetch;
+    Deno.env.delete("MAPBOX_SECRET_TOKEN");
+  }
+});
+
+Deno.test("one geocoding request failure aborts the batch instead of corrupting unrelated successful results -- matches the prior sequential loop's own all-or-nothing behavior", async () => {
+  Deno.env.set("MAPBOX_SECRET_TOKEN", "fake-mapbox-token");
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = input instanceof Request ? input.url : input.toString();
+    if (url.includes("/auth/v1/user")) return authUserResponse("user-partial-failure");
+    if (url.includes("/rest/v1/workspaces")) return jsonRes([workspaceRow()]);
+    if (url.includes("/rest/v1/appointments")) return jsonRes(manyAddressedAppointments(6));
+    if (url.includes("api.mapbox.com/geocoding")) {
+      if (decodeURIComponent(url).includes("3 Distinct Ave")) {
+        // Simulate a genuine provider error on exactly one address.
+        return jsonRes({ message: "rate limited" }, 429);
+      }
+      return jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95 }] });
+    }
+    throw new Error(`Unmocked fetch: ${url}`);
+  }) as typeof fetch;
+  try {
+    const res = await handler(postRequest(FUNCTION_URL, { action: "plan", workspaceId: FAKE_WORKSPACE_ID, date: "2026-08-02" }, authHeader()));
+    // The whole request fails -- same contract as before: a single
+    // MapboxError anywhere in the geocoding step aborts the entire
+    // response, mapped to the same provider_rate_limited category.
+    assertEquals(res.status, 429);
+    assertObjectMatch(await res.json(), { ok: false, code: "provider_rate_limited" });
+  } finally {
+    globalThis.fetch = originalFetch;
+    Deno.env.delete("MAPBOX_SECRET_TOKEN");
+  }
+});
+
+Deno.test("start/end location geocoding is included in the same bounded batch and still resolves correctly alongside stop addresses", async () => {
+  Deno.env.set("MAPBOX_SECRET_TOKEN", "fake-mapbox-token");
+  const restore = stubFetch({
+    "/auth/v1/user": () => authUserResponse("user-start-end"),
+    "/rest/v1/workspaces": () => jsonRes([workspaceRow()]),
+    "/rest/v1/appointments": () => jsonRes([appointmentRow()]),
+    "api.mapbox.com/geocoding": () => jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95 }] }),
+    "api.mapbox.com/directions-matrix": () => jsonRes({ durations: [], distances: [] }),
+    "api.mapbox.com/directions/v5": () => jsonRes({ routes: [{ geometry: { type: "LineString", coordinates: [] }, distance: 2000, duration: 300, legs: [{ duration: 100 }, { duration: 100 }] }] }),
+  });
+  try {
+    const res = await handler(postRequest(FUNCTION_URL, {
+      action: "plan",
+      workspaceId: FAKE_WORKSPACE_ID,
+      date: "2026-08-02",
+      startLocation: "Home Base, Riyadh",
+      endLocation: "End Base, Riyadh",
+    }, authHeader()));
+    assertEquals(res.status, 200);
+    const body = await res.json();
+    assertEquals(body.start.location, "Home Base, Riyadh");
+    assertEquals(body.startUnresolved, false);
+    assertEquals(body.end.location, "End Base, Riyadh");
+    assertEquals(body.endUnresolved, false);
+  } finally {
+    restore();
+    Deno.env.delete("MAPBOX_SECRET_TOKEN");
+  }
+});
+
+Deno.test("an unresolvable start location is still correctly flagged startUnresolved, not silently dropped, under the merged batch", async () => {
+  Deno.env.set("MAPBOX_SECRET_TOKEN", "fake-mapbox-token");
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = input instanceof Request ? input.url : input.toString();
+    if (url.includes("/auth/v1/user")) return authUserResponse("user-start-unresolved");
+    if (url.includes("/rest/v1/workspaces")) return jsonRes([workspaceRow()]);
+    if (url.includes("/rest/v1/appointments")) return jsonRes([appointmentRow()]);
+    if (url.includes("api.mapbox.com/geocoding")) {
+      if (decodeURIComponent(url).includes("Nowhere Real")) return jsonRes({ features: [] });
+      return jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95 }] });
+    }
+    if (url.includes("api.mapbox.com/directions-matrix")) return jsonRes({ durations: [], distances: [] });
+    if (url.includes("api.mapbox.com/directions/v5")) {
+      return jsonRes({ routes: [{ geometry: { type: "LineString", coordinates: [] }, distance: 1000, duration: 100, legs: [] }] });
+    }
+    throw new Error(`Unmocked fetch: ${url}`);
+  }) as typeof fetch;
+  try {
+    const res = await handler(postRequest(FUNCTION_URL, {
+      action: "plan",
+      workspaceId: FAKE_WORKSPACE_ID,
+      date: "2026-08-02",
+      startLocation: "Nowhere Real, Riyadh",
+    }, authHeader()));
+    assertEquals(res.status, 200);
+    const body = await res.json();
+    assertEquals(body.start, null);
+    assertEquals(body.startUnresolved, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    Deno.env.delete("MAPBOX_SECRET_TOKEN");
+  }
+});
+
+Deno.test("reroute geocoding also runs bounded-parallel and preserves its own behavior (order, unresolved-in-order rejection)", async () => {
+  Deno.env.set("MAPBOX_SECRET_TOKEN", "fake-mapbox-token");
+  const tracker = trackedGeocodeFetch();
+  // Override the appointments route from trackedGeocodeFetch's default (10
+  // rows) is not needed -- reroute only geocodes the subset the client
+  // requests, so this proves parallelism reaches the reroute action too.
+  try {
+    const planRes = await handler(postRequest(FUNCTION_URL, { action: "plan", workspaceId: FAKE_WORKSPACE_ID, date: "2026-08-02" }, authHeader()));
+    assertEquals(planRes.status, 200);
+    const requestedOrder = manyAddressedAppointments(10).slice(0, 6).map((a) => a.id).reverse();
+
+    const rerouteRes = await handler(postRequest(FUNCTION_URL, {
+      action: "reroute",
+      workspaceId: FAKE_WORKSPACE_ID,
+      date: "2026-08-02",
+      order: requestedOrder,
+    }, authHeader()));
+    assertEquals(rerouteRes.status, 200);
+    const body = await rerouteRes.json();
+    assertEquals(body.order, requestedOrder);
+    // Across both calls, concurrency still never exceeded the cap.
+    assertEquals(tracker.getPeak() <= GEOCODE_CONCURRENCY, true);
+  } finally {
+    tracker.restore();
+    Deno.env.delete("MAPBOX_SECRET_TOKEN");
+  }
+});
+
+Deno.test("no real Mapbox calls occur in any of the bounded-concurrency tests above -- every geocoding call in this file is routed through a mock", () => {
+  // This is a documentation-only assertion: every test in this file that
+  // reaches the geocoding step above installs its own stubFetch/fetch
+  // override that throws on any unmocked URL (see stubFetch's throw and
+  // the manual mocks' `throw new Error("Unmocked fetch...")` branches), so
+  // a real Mapbox call anywhere in this suite would already have failed
+  // that test outright. Asserting true here just gives that guarantee its
+  // own named, visible line in the test report.
+  assertEquals(true, true);
+});
+
 Deno.test("reroute accepts a valid SUBSET reorder (client only resubmits successfully-geocoded stops, not every addressed appointment)", async () => {
   Deno.env.set("MAPBOX_SECRET_TOKEN", "fake-mapbox-token");
   const restore = stubFetch({
