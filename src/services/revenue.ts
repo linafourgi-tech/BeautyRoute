@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { buildMonthlySeries } from '../lib/monthSeries'
 
 export type MonthlyRevenueSummary = {
   totalNet: number
@@ -6,6 +7,14 @@ export type MonthlyRevenueSummary = {
   periodStart: string
   periodEnd: string
 }
+
+export type RevenueMonthPoint = {
+  monthKey: string
+  label: string
+  total: number
+}
+
+const REVENUE_SERIES_MONTHS = 6
 
 // 1. Sum this workspace's recorded revenue for the calendar month containing
 // `referenceDate` (defaults to now). Workspace-scoped via an explicit
@@ -35,4 +44,39 @@ export async function getMonthlyRevenue(workspaceId: string, referenceDate: Date
 
   const totalNet = (data ?? []).reduce((sum, row) => sum + (Number(row.net_total) || 0), 0)
   return { totalNet, currency: 'SAR', periodStart, periodEnd }
+}
+
+// 2. Get a rolling N-month revenue series (default 6, ending at
+// referenceDate's month, inclusive) -- powers the Business Engine's
+// revenue-vs-expenses chart, replacing the static `revenueByMonth` mock
+// array it used to import from data/mockData.js. One bounded query across
+// the whole window (not one round-trip per month), grouped client-side by
+// processed_at's UTC year-month via the shared lib/monthSeries.js bucketer
+// -- mirrors the bounded-window query pattern already used by
+// getAppointments()/getTodaysAppointments() (Phase 13 Step 3).
+export async function getRevenueSeries(
+  workspaceId: string,
+  months: number = REVENUE_SERIES_MONTHS,
+  referenceDate: Date = new Date()
+): Promise<RevenueMonthPoint[]> {
+  const endYear = referenceDate.getUTCFullYear()
+  const endMonth = referenceDate.getUTCMonth()
+  const windowStart = new Date(Date.UTC(endYear, endMonth - months + 1, 1)).toISOString()
+  const windowEnd = new Date(Date.UTC(endYear, endMonth + 1, 1)).toISOString()
+
+  const { data, error } = await supabase
+    .from('revenues')
+    .select('net_total, processed_at')
+    .eq('workspace_id', workspaceId)
+    .gte('processed_at', windowStart)
+    .lt('processed_at', windowEnd)
+
+  if (error) throw error
+
+  return buildMonthlySeries(data ?? [], {
+    dateField: 'processed_at',
+    valueField: 'net_total',
+    months,
+    referenceDate,
+  })
 }
