@@ -1,26 +1,19 @@
 // src/data/mockData.js
-
-// 1. Core user/professional details (supporting both singular and plural forms)
-export const stylist = {
-  name: "Salma Al-Ajili",
-  role: "Mobile Hairstylist",
-  city: "Riyadh",
-  rating: 4.9,
-};
-
-export const stylists = [
-  {
-    id: 1,
-    name: "Salma Al-Otaibi",
-    category: "Hair",
-    specialty: "Hair Coloring & Styling",
-    rating: 4.9,
-    reviews: 124,
-    image: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=60"
-  }
-];
-
-// 2. Full clients list with their timelines and beauty passports
+//
+// TODO(mockData-audit, 2026-08-05): trimmed down from its original shape.
+// This file used to export `stylist`, `stylists`, `appointments`,
+// `revenueByMonth`, and `engines` in addition to `clients` below -- a
+// repo-wide audit (grep across src/ and supabase/) confirmed none of those
+// were imported anywhere, including `revenueByMonth`, which became dead
+// the moment BusinessEngine.jsx moved to real Supabase queries
+// (services/revenue.ts's getRevenueSeries + services/expenses.ts's
+// getExpensesSeries) in this same pass. Removed as genuinely-unused dead
+// code, not a functional change.
+//
+// `clients` below is the one export still in use, and only by
+// ClientPortal.jsx, which is intentionally still mocked -- see the TODO
+// block at the top of that file for exactly why (no client-facing auth or
+// business-resolution system exists yet to fetch a real client against).
 export const clients = [
   {
     id: "c1",
@@ -69,65 +62,5 @@ export const clients = [
     timeline: [
       { date: "2026-05-19", service: "Henna color + trim", notes: "Confirmed no reaction. Continue henna line.", rating: 5, photo: "https://picsum.photos/seed/dana1/400/480" },
     ],
-  },
-];
-
-// 3. Complete appointments logs
-export const appointments = [
-  { id: "a1", clientId: "c1", client: "Nour Al-Faisal", service: "Root color 7.3", date: "2026-07-19", time: "10:00", location: "Al Narjis, Riyadh", status: "confirmed", travelMinFromPrev: 0, distanceKmFromPrev: 0 },
-  { id: "a2", clientId: "c2", service: "Bridal trial run-through", client: "Rana Bakhsh", date: "2026-07-19", time: "13:30", location: "Al Malqa, Riyadh", status: "confirmed", travelMinFromPrev: 22, distanceKmFromPrev: 14.2 },
-  { id: "a5", clientId: "c3", client: "Dana Al-Qahtani", service: "Blowout", date: "2026-07-19", time: "16:30", location: "Hittin, Riyadh", status: "confirmed", travelMinFromPrev: 18, distanceKmFromPrev: 9.6 },
-  { id: "a3", clientId: "c3", client: "Dana Al-Qahtani", service: "Henna touch-up", date: "2026-07-20", time: "16:00", location: "Hittin, Riyadh", status: "pending", travelMinFromPrev: 0, distanceKmFromPrev: 0 },
-  { id: "a4", clientId: "c1", client: "Nour Al-Faisal", service: "Blowout", date: "2026-07-22", time: "09:00", location: "Al Narjis, Riyadh", status: "confirmed", travelMinFromPrev: 0, distanceKmFromPrev: 0 },
-];
-
-// 4. Financial breakdown (fixing the current error!)
-export const revenueByMonth = [
-  { month: "Feb", revenue: 4200, expenses: 900 },
-  { month: "Mar", revenue: 5100, expenses: 1100 },
-  { month: "Apr", revenue: 4800, expenses: 950 },
-  { month: "May", revenue: 6200, expenses: 1300 },
-  { month: "Jun", revenue: 7100, expenses: 1450 },
-  { month: "Jul", revenue: 5600, expenses: 1200 },
-];
-
-// 5. App platform core modules
-export const engines = [
-  {
-    id: "appointments",
-    name: "Appointment Engine",
-    tagline: "Booking, calendar, waiting list, reminders",
-    color: "wine",
-  },
-  {
-    id: "passport",
-    name: "Beauty Memory Engine",
-    tagline: "The Beauty Passport — every client, remembered",
-    color: "gold",
-    starred: true,
-  },
-  {
-    id: "route",
-    name: "Route Engine",
-    tagline: "Smart routing, traffic, fuel estimation",
-    color: "sage",
-  },
-  {
-    id: "business",
-    name: "Business Engine",
-    tagline: "Revenue, expenses, reports, analytics",
-    color: "gold",
-  },
-  {
-    id: "ai",
-    name: "AI Engine",
-    tagline: "Face analysis, hair recommendation, AI coach",
-    color: "wine",
-  },
-  {
-    id: "salon",
-    name: "Salon Engine",
-    tagline: "Staff, POS, inventory, commission",
-    color: "sage",
   },
 ];

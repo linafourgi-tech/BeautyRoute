@@ -41,13 +41,21 @@ Wired to real Supabase data, with workspace-scoped RLS:
 - Route Engine — maps & optimized routing (`/route`)
 - AI Engine — AI Assistant (`/ai`)
 - Pricing / subscription plans (`/pricing`)
+- Business Engine (`/business`) — revenue/expenses (6-month series) and
+  longest-standing clients, all from real workspace-scoped Supabase queries.
 
 Present in the app but **not** yet wired to real data (placeholder or mock
 data only — see Current Limitations):
 
-- Business Engine (`/business`) — uses static mock data from `src/data/mockData.js`.
 - Client Portal (`/client-portal`) — a client-facing demo screen, explicitly
-  marked in its own source as using demo data pending a real implementation.
+  marked in its own source (see the TODO block at the top of
+  `src/pages/ClientPortal.jsx`) as pending a real implementation. Genuinely
+  blocked, not an oversight: there is no client-facing auth/identity system
+  yet (the route is intentionally outside the professional-side
+  `ProtectedRoute`), so there is no real "logged-in client" or business to
+  fetch data for. Its simulated AI face-shape analysis is a placeholder for
+  the separate BR-FS-001 initiative, which is itself blocked pending dataset
+  licensing review.
 - Salon Engine (`/salon`) — a locked "coming soon" preview with no data layer;
   intentionally inert until a future Salon plan tier exists.
 
@@ -150,8 +158,9 @@ src/
                      routing/subscription-specific components, and the map
                      component.
   contexts/          WorkspaceContext (current workspace/session state).
-  data/              Static mock data still used by Business Engine and
-                     Client Portal (see Current Limitations).
+  data/              Static mock data still used by Client Portal only
+                     (see Current Limitations) -- Business Engine moved to
+                     real Supabase queries and no longer imports from here.
   docs/              In-app product/brand reference docs (not build output;
                      see Documentation Index).
   hooks/             useSession, useCurrentWorkspace, useSubscription.
@@ -239,8 +248,8 @@ not a current data-integrity issue; see the Risks section of
   `subscription_status` are not yet kept in sync by real billing events.
 - **BR-FS-001 has no implementation** — research and specification only, and
   blocked on dataset licensing review (see Section 8).
-- **Business Engine, Client Portal, and Salon Engine are not wired to real
-  data** (see Section 4).
+- **Client Portal and Salon Engine are not wired to real data** (see Section
+  4). Business Engine now is (real revenue/expense/client queries).
 - **No formal security review has been completed yet.**
 - **No Supabase-local-dev/RLS integration test tier exists yet** — RLS
   policies themselves are not yet exercised by an automated test against a

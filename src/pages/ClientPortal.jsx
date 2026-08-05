@@ -13,15 +13,42 @@ import {
   CalendarDays,
   Clock,
   BookHeart,
+  FlaskConical,
 } from "lucide-react";
 import { clients } from "../data/mockData";
 
-/* ------------------------------------------------------------------ */
-/* Demo data — swap for the real logged-in client + AI Engine later    */
-/* ------------------------------------------------------------------ */
+// TODO(mockData-audit, 2026-08-05): this page is still mocked end-to-end,
+// intentionally -- not an oversight. Documented as an Informational finding
+// in Phase 12's security review ("mock-only ClientPortal, no upload
+// pipeline yet") and again in App.jsx's routing comment. A user-visible
+// "Prototype" notice below (see PrototypeNotice) says as much on the page
+// itself, not just in source comments.
+//
+// Every mocked value below carries its own TODO at its exact location, in
+// this same TODO(mockData-audit, 2026-08-05) / Why / Missing format:
+//   - `client` (this file, below)
+//   - FACE_SHAPES / STYLE_LIBRARY / ANALYZE_STEPS / runAnalysis()
+//   - SERVICES
+//   - SmartBookingEngine's confirm()
+//
+// The one safe, non-invented fix already applied: nextSevenDays() used to
+// start from a hardcoded literal date ("2026-07-19") instead of the real
+// current date -- fixed, since that required no backend.
 
+// TODO(mockData-audit, 2026-08-05): `client` is a placeholder, not a real
+// logged-in client.
+// Why: no client-facing identity exists for this route.
+// Missing: a client-auth system (login/magic-link/QR-token) and a
+// client_users-equivalent table; `/client-portal` is deliberately outside
+// ProtectedRoute (see App.jsx) until one exists.
 const client = clients[0]; // "logged in" client for this demo, e.g. Nour Al-Faisal
 
+// TODO(mockData-audit, 2026-08-05): FACE_SHAPES, STYLE_LIBRARY, and
+// ANALYZE_STEPS below back a fully simulated AI result (see runAnalysis()).
+// Why: BR-FS-001, the real face-shape classifier, is blocked pending
+// dataset licensing review.
+// Missing: the BR-FS-001 model itself (MobileNetV3-Large, per
+// docs/PROJECT_ROADMAP.md) -- no model exists to call yet.
 const FACE_SHAPES = ["Oval", "Round", "Square", "Heart", "Diamond"];
 
 const STYLE_LIBRARY = {
@@ -52,6 +79,12 @@ const STYLE_LIBRARY = {
   ],
 };
 
+// TODO(mockData-audit, 2026-08-05): SERVICES below is a hardcoded catalog.
+// Why: this anonymous route has no URL param or other signal identifying
+// which workspace's services to show.
+// Missing: a business-resolution mechanism for this route -- the real
+// catalog (service_templates/services tables + getServiceTemplates(),
+// already used by Services.jsx) exists and is ready to use once one does.
 const SERVICES = [
   { id: "cut", name: "Haircut", icon: Scissors, price: "SAR 120", duration: "45 min" },
   { id: "color", name: "Color Formula", icon: Palette, price: "SAR 280", duration: "2 hr" },
@@ -66,7 +99,12 @@ const ANALYZE_STEPS = [
 ];
 
 function nextSevenDays() {
-  const base = new Date("2026-07-19T00:00:00");
+  // Real current date, not a hardcoded literal -- this is a safe fix (no
+  // backend needed), unlike the rest of this page's mocked data. See the
+  // confirm() TODO below for why the booking flow itself still can't be
+  // wired to real availability/Supabase data.
+  const base = new Date();
+  base.setHours(0, 0, 0, 0);
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(base);
     d.setDate(base.getDate() + i);
@@ -85,6 +123,7 @@ export default function ClientPortal() {
     <div className="min-h-screen bg-ink text-ivory">
       <div className="max-w-md mx-auto min-h-screen bg-ink shadow-[0_0_60px_rgba(156,85,104,0.10)] relative">
         <Header client={client} onOpenPassport={() => setPassportOpen(true)} />
+        <PrototypeNotice />
 
         <main className="px-5 pb-16 space-y-10 pt-6">
           <AIConsultationHub client={client} />
@@ -158,6 +197,12 @@ function AIConsultationHub({ client }) {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
+  // TODO(mockData-audit, 2026-08-05): this result is simulated
+  // (setInterval + Math.random()), not a call to a real endpoint.
+  // Why: BR-FS-001 is blocked pending dataset licensing review (see the
+  // FACE_SHAPES/STYLE_LIBRARY/ANALYZE_STEPS TODO above).
+  // Missing: the BR-FS-001 model itself -- do not treat this as
+  // production-ready face-shape detection.
   function runAnalysis() {
     setStatus("analyzing");
     setStepIndex(0);
@@ -360,6 +405,13 @@ function SmartBookingEngine() {
 
   const canConfirm = service && day && time;
 
+  // TODO(mockData-audit, 2026-08-05): this only sets local state and never
+  // calls createAppointment() -- a confirmed booking here does not create
+  // a real appointment.
+  // Why: no real client_id/workspace_id exists to book against from this
+  // route.
+  // Missing: the client-auth and business-resolution systems described in
+  // the `client` and SERVICES TODOs above.
   function confirm() {
     if (!canConfirm) return;
     setConfirmed(true);
@@ -473,6 +525,28 @@ function SmartBookingEngine() {
 }
 
 /* ------------------------------ Shared UI ---------------------------- */
+
+// Small, honest status notice -- follows the same pattern already
+// established by SalonEngine.jsx's "This engine activates on the Salon
+// plan" card (icon badge + bold line + muted supporting line in a
+// bordered rounded card), in this page's own wine/white-card visual
+// language rather than SalonEngine's gold. See the mockData-audit TODO
+// block near the top of this file for exactly what's simulated and why.
+function PrototypeNotice() {
+  return (
+    <div className="mx-5 mt-4 rounded-2xl border border-wine/30 bg-surface-2 px-4 py-3 flex items-start gap-3">
+      <span className="h-8 w-8 rounded-full bg-white flex items-center justify-center shrink-0">
+        <FlaskConical size={14} className="text-wine" />
+      </span>
+      <div>
+        <p className="text-ivory text-sm font-medium">Prototype</p>
+        <p className="text-muted text-xs mt-0.5">
+          AI analysis and booking are currently simulated and are not yet connected to live backend services.
+        </p>
+      </div>
+    </div>
+  );
+}
 
 function SectionHeading({ icon: Icon, title, subtitle }) {
   return (
