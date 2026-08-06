@@ -1,0 +1,43 @@
+-- Local-development seed data.
+--
+-- Referenced by supabase/config.toml's [db.seed] block
+-- (sql_paths = ["./seed.sql"]) -- standard `supabase init` scaffolding
+-- present in every Supabase project by default. This file did not exist
+-- yet, which produced a "pattern does not match any files" warning on
+-- `supabase start`/`supabase db reset` (per Supabase's own seeding docs:
+-- a missing/non-matching seed path warns, it does not fail the reset).
+-- Added during the Phase 14 (Handover Readiness) README audit to resolve
+-- that dangling reference -- investigated first, per instruction, rather
+-- than either blindly deleting the config or writing something invented.
+--
+-- Intentionally contains no INSERT statements. Every meaningful table in
+-- this schema (workspaces, clients, appointments, ...) traces back to a
+-- real public.profiles row via a NOT NULL foreign key, and profiles.id
+-- itself is a foreign key to auth.users.id (profiles_id_fkey -- see
+-- schema.sql). auth.users is Supabase Auth's own table, with many
+-- internal, Auth-managed columns (encrypted_password, instance_id, aud,
+-- role, confirmation tokens, ...); hand-inserting a row into it from raw
+-- seed SQL is fragile and version-dependent, and isn't how any user is
+-- created anywhere else in this project either -- both
+-- src/lib/devAuth.js and
+-- supabase/migrations/20260724110000_seed_dev_workspace_membership.sql
+-- describe the dev user as created directly in Supabase Studio, not
+-- seeded via SQL. A seed.sql that inserted demo workspace/client rows
+-- ahead of any real auth.users row would either violate that foreign key
+-- outright on a fresh database, or -- worse -- silently attach real
+-- app data to a placeholder identity nothing else in the app expects.
+--
+-- To set up your own local dev workspace after `supabase start`:
+--   1. Create a user in Supabase Studio (default local URL:
+--      http://127.0.0.1:54323) -> Authentication -> Add user. This
+--      creates the auth.users row; public.handle_new_user() (see
+--      schema.sql) inserts the matching public.profiles row if that
+--      trigger is active on your instance -- this file cannot verify
+--      that binding itself, since schema.sql only captures `public`
+--      schema objects, not auth.users' own trigger wiring.
+--   2. Set VITE_DEV_EMAIL / VITE_DEV_PASSWORD in your local .env to that
+--      user's credentials (see README.md's Environment Variables
+--      section) so src/lib/devAuth.js signs you in automatically in dev.
+--   3. Sign in and complete the normal /onboarding flow to create your
+--      own workspace -- the same path every real signup takes, not a
+--      special case requiring seed data.
