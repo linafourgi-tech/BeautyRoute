@@ -1,41 +1,61 @@
 # Build Notes
 
 **Document type:** Operational notes on the current production build. Records
-what the build actually outputs today and why, and what optimization work is
-explicitly deferred. This is not a performance audit or a completed
-optimization report — no optimization work described below has been done yet.
+what the build actually outputs today and why. This is a current-state
+snapshot, not the detailed performance record — for the full before/after
+measurement, rationale, and CI budget derivation, see
+[`docs/performance/PHASE_13_FINAL_REPORT.md`](../performance/PHASE_13_FINAL_REPORT.md)
+and
+[`docs/performance/PHASE_13_BUNDLE_BASELINE.md`](../performance/PHASE_13_BUNDLE_BASELINE.md).
+This document previously described the **pre-Phase-13** build (a single
+eagerly-loaded ~940 KB/268 KB-gzip main bundle, no code splitting); Phase 13
+(route-level code splitting plus four other optimization steps) is complete
+and merged to `main`, and the numbers below reflect that.
 
 ## 1. Current production build status
 
-`npm run build` (`vite build`) currently **succeeds**. As of this writing:
+`npm run build` (`vite build`) currently **succeeds**. Verified against a
+fresh build on 2026-08-06:
 
 ```text
-dist/index.html                        0.46 kB │ gzip:   0.29 kB
-dist/assets/index-*.css               87.49 kB │ gzip:  14.53 kB
-dist/assets/index-*.js               939.65 kB │ gzip: 267.58 kB
-dist/assets/mapbox-gl-*.js         1,825.33 kB │ gzip: 501.20 kB
+dist/index.html                          0.54 kB │ gzip:   0.32 kB
+dist/assets/index-*.css                 43.09 kB │ gzip:   8.76 kB
+dist/assets/index-*.js                 458.17 kB │ gzip: 132.55 kB
+dist/assets/BusinessEngine-*.js        352.86 kB │ gzip: 102.62 kB
+dist/assets/mapbox-gl-*.js           1,825.34 kB │ gzip: 501.20 kB
+(+ 40 further per-route/vendor chunks, 45 total)
 ```
 
 (Hashes in filenames change per build; sizes are representative of the
 current state and will drift slightly as the app grows — this is a snapshot,
-not a pinned budget.)
+not a pinned budget. The pinned budget is `scripts/bundle-budget.mjs`,
+enforced in CI — see Section 6.)
+
+Every page in `src/App.jsx` is loaded via `React.lazy()` behind a shared
+`Suspense` boundary, so `index-*.js` above is the app shell (React, React
+Router, the Supabase client, shared contexts, and other always-needed code)
+rather than every page. `BusinessEngine-*.js` is the largest individual
+lazy route chunk, fetched only when a user navigates to `/business`.
 
 ## 2–4. Current bundle-size warnings
 
-Vite's build reporter emits an advisory warning because two chunks exceed
+Vite's build reporter emits an advisory warning because one chunk exceeds
 its default 500 kB (minified) threshold:
 
-- **Main application bundle** (`dist/assets/index-*.js`, ~940 kB / ~268 kB
-  gzipped) — contains all page/route code and app-level dependencies
-  (React, React Router, Recharts, the Supabase client, etc.), because every
-  page is currently statically imported into `src/App.jsx` (see Section 6).
 - **Mapbox GL bundle** (`dist/assets/mapbox-gl-*.js`, ~1.8 MB / ~501 kB
-  gzipped) — the `mapbox-gl` library itself. It is already split into its
-  own chunk (see Section 6) because `src/components/RouteMap.jsx` loads it
-  via a dynamic `import("mapbox-gl")` rather than a static import — but the
-  library itself is simply large; splitting it into its own chunk doesn't
-  shrink it, it only means it's fetched separately from (and, per Section 6,
-  currently still alongside) the rest of the app.
+  gzipped) — the `mapbox-gl` library itself. It is dynamically imported by
+  `src/components/RouteMap.jsx`, and `RouteEngine` (the only page that
+  renders `RouteMap`) is itself `React.lazy()`-loaded, so this chunk is only
+  fetched when a user actually navigates to `/route` — never on initial page
+  load, and never alongside the rest of the app. The library itself is
+  simply large; splitting it into its own chunk doesn't shrink it, it only
+  controls *when* it's fetched.
+
+The main application bundle (`dist/assets/index-*.js`, ~458 kB / ~133 kB
+gzipped) is now **under** the 500 kB warning threshold and does not trigger
+this warning — a change from the pre-Phase-13 state this document previously
+described, where the (then-unsplit) main bundle was the second chunk
+tripping the same warning.
 
 ## 5. Why these are warnings, not build failures
 
@@ -46,31 +66,32 @@ affect initial page-load performance for users on slower connections, not
 to indicate broken or invalid code. No functionality is degraded by the
 current bundle sizes.
 
-## 6. Deferred optimization ideas (none implemented yet)
+## 6. Optimization status
 
-The following are documented as **candidate future work only**. None of
-them has been implemented as of this commit:
+Phase 13 (Performance Optimization) is **complete** — see
+[`PHASE_13_FINAL_REPORT.md`](../performance/PHASE_13_FINAL_REPORT.md) for
+the full seven-step record. What's relevant to this build:
 
-- **Route-level lazy loading.** `src/App.jsx` currently imports every page
-  component statically (no `React.lazy`/`Suspense` anywhere in the
-  codebase), so all page code ships in the single main bundle regardless of
-  which route a user visits. Converting page imports to `React.lazy()` would
-  let each route's code load on demand instead.
-- **Dynamic imports for map components.** `mapbox-gl` (the library) is
-  already loaded via a dynamic `import()` inside `RouteMap.jsx`, so it's
-  already split into its own chunk. What is *not* yet dynamic is the
-  `RouteMap` component and the `RouteEngine` page themselves — both are
-  statically imported into the main bundle today, so the `mapbox-gl` chunk
-  is fetched as soon as the app loads a route that references `RouteEngine`,
-  not only when a user actually navigates to `/route`. Combining this with
-  route-level lazy loading above would defer both.
-- **General code splitting.** Beyond the map, no other manual or automatic
-  chunk boundaries have been configured (e.g. via
-  `build.rollupOptions.output.manualChunks` or Rolldown's chunking options).
-- **Bundle analysis.** No bundle-composition analysis (e.g.
-  `rollup-plugin-visualizer` or equivalent) has been run against this
-  codebase; the breakdown above is limited to what Vite's default build
-  output reports, not a full dependency-by-dependency size audit.
+- **Route-level lazy loading — done.** Every page in `src/App.jsx` is
+  `React.lazy()`'d behind one shared `Suspense` boundary, so page code
+  ships only to users who visit that route.
+- **Dynamic import for the map library — done.** `mapbox-gl` is loaded via
+  a dynamic `import()` inside `RouteMap.jsx`, and (per Section 2–4 above)
+  is now only fetched on actual navigation to `/route`, not on app load.
+- **CI-enforced bundle budgets — done.** `scripts/bundle-budget.mjs` runs
+  after every build (`npm run perf:bundle-budget`, wired into CI) and fails
+  the build if any of 5 measured budgets is exceeded. Verified passing
+  against today's build: all 5 budgets pass with real margin. See
+  `PHASE_13_BUNDLE_BASELINE.md` for the exact budgets and rationale.
+- **Not yet done — general code splitting beyond routes.** No manual chunk
+  boundaries (`build.rollupOptions.output.manualChunks` or equivalent) have
+  been configured beyond what route-level splitting and Vite's own
+  automatic chunking already produce.
+- **Not yet done — bundle-composition analysis.** No dependency-by-
+  dependency breakdown (e.g. `rollup-plugin-visualizer`) has been run
+  against the ~458 kB main chunk to identify further splitting
+  opportunities; this is tracked as remaining technical debt in the Phase
+  13 final report.
 
 ## 7. Mapbox licensing / commercial cost awareness
 
@@ -100,7 +121,12 @@ it was verified independently of tile rendering (see
 
 ## 9. Status
 
-**No performance optimization has been implemented yet.** Everything in
-Section 6 is a documented idea for future work, not a completed or
-in-progress change. This document records the current, honest state of the
-build — not a plan commitment or a timeline.
+**Phase 13 performance optimization is complete** (route-level code
+splitting, shared session context, bounded queries, geocoding
+parallelization, and CI-enforced bundle budgets — see
+`docs/performance/PHASE_13_FINAL_REPORT.md`). This document reflects the
+build as it stands after that work, verified against a real build on
+2026-08-06. Remaining, explicitly-deferred bundle work is limited to the two
+items in Section 6 (general code splitting beyond routes, and a
+bundle-composition analysis) — both tracked as technical debt in the Phase
+13 final report, not implemented here.
