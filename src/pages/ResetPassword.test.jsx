@@ -40,6 +40,16 @@ describe("ResetPassword page", () => {
   });
 
   it("shows a loading state while the reset link is being checked", () => {
+    // This test asserts the transient state that exists only *before* the
+    // effect's getSession() check resolves. The shared beforeEach default
+    // (mockResolvedValue(null)) would settle on the next microtask tick and
+    // flip phase to "invalid" outside this synchronous test's act(...)
+    // scope, producing a real (not spurious) act warning -- awaiting/
+    // findBy-ing it away would just hide that update, and would also
+    // contradict the state this test claims to verify. Instead, hold the
+    // mocked getSession() promise pending for the duration of this test so
+    // the effect genuinely has not settled yet, matching what's asserted.
+    getSessionMock.mockReturnValue(new Promise(() => {}));
     renderResetPassword();
     expect(screen.getByText("Checking your reset link…")).toBeInTheDocument();
   });
