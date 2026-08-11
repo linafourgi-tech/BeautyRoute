@@ -101,6 +101,9 @@ supabase/
                       Postgres major version, Edge Runtime settings, etc.).
   seed.sql            Local-dev seed script run by `supabase start`/`db
                       reset`. Intentionally seeds no data — see Section 11.
+  tests/              Real local-Postgres RLS integration test(s) + its own
+                      README (prerequisites, known environment caveats).
+                      Not run in CI. See Section 13.
 
 docs/
   PROJECT_ROADMAP.md  Phase-by-phase status, risks, milestones, and the
@@ -114,8 +117,9 @@ docs/
   quality/            Database migration policy; Phase 16 remediation report.
   verification/       Live-verification reports against real external
                       services (currently: Maps & Routing).
-  operations/         Build notes. NOTE: as of this audit, this file is
-                      stale relative to docs/performance/ — see Section 17.
+  operations/         Build notes — current production build snapshot,
+                      cross-referencing docs/performance/ for the full
+                      before/after measurement.
   design-reference/   Historical design-tool export, not production code —
                       see its own NOTICE.md.
 
@@ -305,7 +309,13 @@ npx supabase start
 
 Local ports, from this repo's own `supabase/config.toml`: API `54321`,
 Postgres `54322`, Studio `54323`, local email testing (Inbucket) `54324`,
-Analytics `54327`. `supabase start` applies all migrations automatically,
+Analytics `54327`. **Known issue, confirmed during the Phase 14
+handover-closure pass:** `supabase start`'s automatic migration replay
+currently fails against a genuinely fresh/empty database — the first
+migration file is empty, so a later one references a table nothing
+earlier ever created. See `supabase/tests/README.md` for the exact error
+and the workaround (applying `schema.sql` directly). If that doesn't
+affect you, `supabase start` applies all migrations automatically,
 then runs `supabase/seed.sql` (referenced by `config.toml`'s `[db.seed]`
 block). That file intentionally seeds no demo data — see its own header
 comment for why (every meaningful table traces back to `auth.users` via a
@@ -341,6 +351,14 @@ Deploy: `npx supabase functions deploy <function-name>`.
 npm run test         # Vitest, watch mode
 npm run test:run      # Vitest, single run
 npm run test:coverage # Vitest, single run + v8 coverage report
+```
+
+Real local-Postgres RLS integration test (LOCAL ONLY, requires Docker, not
+run in CI — see `supabase/tests/README.md` for prerequisites and exact
+setup, including two environment caveats found while building it):
+
+```bash
+npm run test:rls:local
 ```
 
 Edge Function tests (Deno — not run by any `npm` script; this is the exact
@@ -444,19 +462,16 @@ also produced this README rewrite; `src/data/mockData.js` was trimmed from
   `subscription_status` are not yet kept in sync by real billing events.
 - **BR-FS-001 has no implementation** (see Section 19).
 - **Client Portal and Salon Engine are not wired to real data** (Section 16).
-- **No Supabase-local-dev/RLS integration test tier exists yet** — RLS
-  policies themselves are not exercised by an automated test against a real
-  Postgres instance; automated tests cover the application-code
-  authorization logic that runs alongside RLS. See
-  `docs/testing/PHASE_15_FINAL_REPORT.md` and `docs/testing/TEST_STRATEGY.md`.
+- **Real-Postgres RLS integration coverage is minimal, not a full tier.**
+  One real test exists and passes — `supabase/tests/rls_workspace_isolation.sql`
+  (`npm run test:rls:local`), proving workspace isolation on the `clients`
+  table against a real local Postgres instance with the real RLS policies
+  applied. Every other RLS-protected table is still only covered by
+  mocked-boundary Vitest/Deno tests, and this test is not wired into CI
+  (no local Postgres/Docker in the CI environment, by design). See
+  `supabase/tests/README.md`, `docs/testing/PHASE_15_FINAL_REPORT.md`, and
+  `docs/testing/TEST_STRATEGY.md`.
 - **No end-to-end (Playwright) tests exist yet.**
-- **`docs/operations/BUILD_NOTES.md` is stale** (audit finding — see
-  Section 20). It describes a ~940 KB/268 KB-gzip main bundle with no code
-  splitting; Phase 13 (already complete) implemented route-level code
-  splitting and got the initial eager payload down to 137.67 KB gzip, with
-  CI-enforced budgets (`npm run perf:bundle-budget`) now preventing
-  regression. Use `docs/performance/PHASE_13_FINAL_REPORT.md` and
-  `docs/performance/PHASE_13_BUNDLE_BASELINE.md` instead.
 - **`src/docs/` reference files are minimal stubs**, not substantive
   documentation (audit finding — see Section 20): `PRODUCT_BIBLE.md` is
   empty (0 bytes); `FEATURES.md`, `DATABASE.md`, and `BRAND_GUIDELINES.md`
@@ -484,9 +499,12 @@ dataset research, a documented model/architecture selection
 training run, and no deployed model exist.** The dataset licensing status
 is explicitly **"REQUIRES LICENSE REVIEW"** (the exact final-decision text
 in `docs/ai/FACE_SHAPE_DECISION.md`), which blocks any implementation work
-from starting. Full record: `docs/ai/`. Client Portal's simulated AI
-face-shape analysis (see Section 16) is a placeholder for this initiative,
-not an early version of it.
+from starting — no dataset, academic or commercial, is currently cleared
+for any of the 3 candidates identified. Full record, including a
+stage-by-stage status table and training-readiness checklist:
+`docs/ai/BR-FS-001_CURRENT_STATUS.md` (start there) and the rest of
+`docs/ai/`. Client Portal's simulated AI face-shape analysis (see Section
+16) is a placeholder for this initiative, not an early version of it.
 
 ## 20. Still missing before handover-ready (audit findings, not fixed here)
 
@@ -495,10 +513,13 @@ this README rewrite, per instruction:
 
 - **No project-specific Supabase setup guide exists anywhere in this repo**
   (Section 11 is built from generic, verified CLI mechanics only).
-- **`docs/operations/BUILD_NOTES.md` needs a rewrite or removal** — it's
-  superseded by `docs/performance/PHASE_13_FINAL_REPORT.md` and
-  `PHASE_13_BUNDLE_BASELINE.md` but still exists as if current. Out of
-  scope for this pass (README only, per instruction).
+- **The migration chain cannot bootstrap a fresh database from scratch**
+  (confirmed during the Phase 14 handover-closure pass, building the RLS
+  test in `supabase/tests/` — see that directory's README.md for the full
+  detail and workaround). Anyone following Section 11's `supabase start`
+  path on a brand-new project will hit this. Not fixed here — it needs an
+  initial-schema migration added by someone with authority over this
+  project's migration history.
 - **`src/docs/*.md` are stub files** that read as if they're real reference
   docs but aren't — worth either fleshing out or removing.
 - **No `CONTRIBUTING.md`.** This README's own Contributing section
