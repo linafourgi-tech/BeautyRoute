@@ -2,7 +2,7 @@
 
 **Document type:** Handover-readiness record. Written for the incoming programmer/maintainer. Every claim below was verified directly against the repository at the commit noted below — not copied from older reports without re-checking.
 
-**As of commit:** `b1701f2` on `main` (merge of PR #11, the nanoid security fix), audited for this document from branch `docs/handover-readiness`.
+**As of commit:** `e2e7ec3` on `main` (merge of PR #12, this document's own first version, tagged `v0.1.0-handover`), updated during a subsequent handover-closure pass from branch `docs/handover-closure`. Sections updated in that pass (BR-FS-001 status pointer, RLS integration-test outcome, known limitations) are marked as such inline rather than silently rewritten as if always current.
 
 **Read this first, then `README.md` for setup.** This document does not duplicate README's setup instructions — see Section 6 for the pointer.
 
@@ -73,6 +73,8 @@ A working, server-side LLM integration calling the **Anthropic API**, invoked on
 
 ### 4B. BR-FS-001 status
 
+**Definitive, up-to-date detail (stage-by-stage status, dataset candidates, licensing, training-readiness checklist, exact next action): `docs/ai/BR-FS-001_CURRENT_STATUS.md`.** Summary below.
+
 **Research and specification only. No model code, no training run, no deployed model exist anywhere in this repository.** This is the original/university custom face-shape classifier initiative, separate from the AI Assistant above.
 
 - **Intended architecture:** MobileNetV3-Large (selected and documented in `docs/ai/BR-FS-001_ARCHITECTURE_SELECTION.md`; the full spec is in `docs/ai/BR-FS-001_MODEL_SPECIFICATION.md`, which itself states plainly: *"Nothing in this document should be read as authorization to acquire or use any dataset discussed in the prior research documents."*)
@@ -86,7 +88,8 @@ A working, server-side LLM integration calling the **Anthropic API**, invoked on
 
 Re-verified for this document, not copied from older reports. Each item below is confirmed current as of `main` @ `b1701f2`.
 
-- **No real Postgres/RLS integration-test tier.** All current automated tests mock the Supabase client boundary; RLS policies are enforced by the real Postgres engine in production but are not yet exercised by an automated test against a real (local or ephemeral) Postgres instance. **Attempted in this handover pass — deferred, environmental blocker, not a repository defect.** See Part 2 write-up below.
+- **Real Postgres/RLS integration coverage is minimal, not a full tier.** One real test now exists and passes (`supabase/tests/rls_workspace_isolation.sql`, `npm run test:rls:local` — see Part 2 write-up below) proving workspace isolation on the `clients` table. Every other RLS-protected table (18 more `CREATE POLICY` statements in `schema.sql`) is still only covered by mocked-boundary Vitest/Deno tests, not a real-Postgres one. Not wired into CI (no local Postgres/Docker in the CI environment, by design).
+- **The migration chain cannot bootstrap a fresh database from scratch.** Newly, concretely confirmed this pass (previously only a generic risk note in `docs/PROJECT_ROADMAP.md`): the first migration file is empty, so replaying `supabase/migrations/*.sql` against an empty database fails partway through. `schema.sql` (applied directly) remains a correct, current baseline; the migration chain itself needs an initial-schema migration added by someone with the authority to make that call — not attempted in this pass. See `supabase/tests/README.md` for the full detail.
 - **No ratings/reviews data model.** Confirmed: no such table exists anywhere in `schema.sql`. The Stylist Dashboard's "Not available" rating state is honest, not a placeholder for hidden data.
 - **Password policy is minimal; no MFA.** Verified in `supabase/config.toml`: `minimum_password_length = 6`, `password_requirements = ""` (no complexity requirement beyond length), `[auth.mfa.totp]`/`[auth.mfa.phone]` both `enroll_enabled = false`. Supabase Auth supports stronger settings; none are currently turned on.
 - **Single shared Supabase environment — no staging project.** Confirmed still true (this is a structural fact, not something a migration fixes): all schema/migration work applies directly to the one real, linked project. Documented and risk-accepted in the Phase 12 security review (finding H-2's root cause), which also fixed the specific standing-access issue that caused; the *absence of a staging environment itself* remains unchanged.
@@ -122,7 +125,8 @@ Every path below was verified to exist as of this document's commit.
 | `docs/quality/PHASE_16_REMEDIATION_REPORT.md` | Three specific production-defect fixes (dashboard hardcoded metrics, login validation, appointments a11y) plus the react-router advisory assessment. |
 | `docs/quality/DATABASE_MIGRATION_POLICY.md` | The rule governing how future migrations may seed dev/test data — read before writing a new migration. |
 | `docs/verification/PHASE_12_LIVE_VERIFICATION_REPORT.md` | Live verification of Maps & Routing against real external services. |
-| `docs/ai/` (6 files) | The complete BR-FS-001 research trail — dataset research, comparison, decision, literature review, architecture selection, model specification. |
+| `docs/ai/` (7 files) | The complete BR-FS-001 research trail — dataset research, comparison, decision, literature review, architecture selection, model specification, and `BR-FS-001_CURRENT_STATUS.md` (the definitive, cross-checked current-status summary — start here). |
+| `supabase/tests/README.md` | How to run the real local-Postgres RLS integration test, and the two environment caveats discovered while building it (Windows port exclusion, the empty first migration). |
 | `docs/operations/BUILD_NOTES.md` | Current production build output snapshot; points to the Phase 13 report for the full before/after story. |
 | `supabase/seed.sql` | Local-dev seed script — intentionally seeds no data; read its header comment for why and for the real local-setup path. |
 
@@ -141,7 +145,7 @@ Every path below was verified to exist as of this document's commit.
 | `supabase/seed.sql` dangling-reference fix | **DONE** (this handover cycle) |
 | `GHSA-2v37-7h3g-55p8` (nanoid) security fix | **DONE** (this handover cycle, PR #11) |
 | This `HANDOVER.md` | **DONE** (this handover cycle) |
-| Real Postgres/RLS integration test | **DEFERRED** — see Part 2 outcome below; blocked by environment, not code |
+| Real Postgres/RLS integration test | **DONE** (this handover-closure cycle) — one real, passing local test; see Part 2 outcome below |
 | Client Portal real backend (client auth, business resolution) | **NEXT** — unscoped, requires product/architecture decisions first, not a quick fix |
 | BR-FS-001 implementation | **BLOCKED** — dataset licensing (academic access, then separately commercial rights) unresolved; no engineering work can start until then |
 | Deployment pipeline / production domain | **NEXT** — Phase 14, not started |
@@ -151,12 +155,16 @@ Every path below was verified to exist as of this document's commit.
 | Staging environment separate from the shared linked project | **NEXT** — structural, requires provisioning a second Supabase project |
 | End-to-end (Playwright) test suite | **NEXT** — deferred since Phase 15, unchanged |
 
-### Part 2 outcome: DEFERRED
+### Part 2 outcome: DONE (updated during handover-closure)
 
-Investigated adding one meaningful RLS integration test against a real local Postgres instance (e.g. proving workspace A cannot read workspace B's data) for this handover pass, per instruction to attempt it only if safe.
+**This section previously said DEFERRED** (Docker unavailable in that environment). Re-investigated from scratch during the handover-closure pass on a different machine, per instruction not to assume the old finding still holds — it didn't.
 
-**Exact blocker:** `supabase start` (the only supported way to run a real local Postgres+Auth+RLS instance for this project) requires Docker. This environment has a stray `docker` CLI client installed but **no Docker Desktop application and no reachable daemon anywhere on the machine** — `docker info` fails to connect (`dockerDesktopLinuxEngine` pipe not found), and an exhaustive search found no Docker Desktop executable and no docker-related process running at all. This is the same environmental gap already noted independently in `docs/testing/TEST_STRATEGY.md` from Phase 15.
+**Docker was found to be genuinely installed** (`AppData\Local\Programs\DockerDesktop\Docker Desktop.exe`, missed by the earlier search's assumed install path) and was started successfully. `npx supabase start` then surfaced a **real, separate, previously-undocumented finding**: it failed to bind its default Postgres port because Windows had reserved that exact port range for Hyper-V/WSL2 (`netsh interface ipv4 show excludedportrange protocol=tcp`) — resolved locally-only by temporarily shifting the port block in a local, uncommitted copy of `supabase/config.toml` (reverted before committing anything; the committed file is unchanged).
 
-**Not faked:** no test was written against mocked infrastructure and presented as an integration test. Nothing was run against the shared/linked Supabase project — that would violate the explicit safety rule against using production/shared infrastructure for this purpose, regardless of Docker availability.
+With Docker and ports working, a **second, more significant finding** emerged: replaying `supabase/migrations/*.sql` against a genuinely empty database fails — `supabase/migrations/20260722092124_name_of_your_migration.sql`, the first migration chronologically, is an **empty file**, so no earlier migration ever creates the base schema a later one (`20260724100000_add_missing_rls_policies.sql`) assumes exists. This is the concrete, now-confirmed consequence of a risk `docs/PROJECT_ROADMAP.md` already flagged generically ("at least one migration file was left empty with an unedited default name") — not a brand-new category of problem, but its first empirically-verified practical impact. **Not fixed here** — reconstructing an initial-schema migration is a large, consequential change to migration history requiring explicit approval, outside this pass's scope (see `docs/quality/DATABASE_MIGRATION_POLICY.md`).
+
+**Workaround used (not a fix to the above):** bootstrapped the local database by applying `schema.sql` — this repository's own verified, current baseline snapshot — directly via `psql` inside the local Postgres container, bypassing the broken migration replay entirely. This is still 100% real: the actual tables, the actual 19 `CREATE POLICY` statements, the actual `is_workspace_member()` function, nothing mocked.
+
+**Test implemented:** `supabase/tests/rls_workspace_isolation.sql`, run via `npm run test:rls:local` (`scripts/test-rls-local.sh`). Proves the real `clients_access` RLS policy: an authenticated user who is only a member of Workspace A can read Workspace A's own client row, and reads **zero** rows from Workspace B's, via the exact session-variable mechanism Postgres's own `auth.uid()` reads from (confirmed by reading its source directly from the running instance) — not a mocked client, not a mocked RLS decision. Self-contained (creates its own fake users/workspaces/data), wrapped in a transaction that unconditionally `ROLLBACK`s, safe to re-run (verified: ran twice, zero residual rows both times). The runner's fail-fast guard is structural, not a string check: it only ever reaches a Docker container already running on this machine via `docker exec`, so there is no connection string or env var that could misdirect it at a shared/production project. **Result: PASS.** Not wired into CI (CI has no local Postgres/Docker environment provisioned, and this project's CI is deliberately never-touches-real-infrastructure by design — see `.github/workflows/ci.yml`'s own header comment) — locally reproducible and real is the stated goal, not CI integration. Full setup/run instructions: `supabase/tests/README.md`.
 
 **This is an environmental limitation, not a repository defect, and does not block handover** — RLS itself is real, enforced by Postgres in production, and its authorization *logic* (the application-code checks that run alongside RLS) is already covered by the existing Deno test suite (`ai-assistant`/`route-planner`'s workspace-membership checks). What's missing is specifically a test against the *database engine's own policy enforcement*, which needs a real local Postgres — the next maintainer with Docker available can pick this up directly; `docs/testing/TEST_STRATEGY.md` Section 7/8 already describes exactly what such a test tier should cover.
