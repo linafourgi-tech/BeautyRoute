@@ -43,50 +43,18 @@ local copy to a port block outside every excluded range (e.g. shift to
 `git checkout -- supabase/config.toml` to discard the local-only edit
 before committing anything.
 
-## Known repository issue: the migration chain cannot bootstrap a fresh database
-
-`supabase/migrations/20260722092124_name_of_your_migration.sql` — the
-first migration, chronologically — is an **empty file** (this was already
-flagged generically in `docs/PROJECT_ROADMAP.md`'s Risks section: "at
-least one migration file was left empty with an unedited default name").
-Its practical consequence, confirmed while building this test: replaying
-`supabase/migrations/*.sql` in order against a genuinely empty local
-database fails partway through (a later migration references a table,
-`appointment_services`, that no earlier migration ever created), because
-the migration history only ever ran incrementally against the one real,
-already-existing linked project — there was never an initial
-"create the whole schema" migration.
-
-**This test works around that by applying `schema.sql` (the repository's
-own baseline snapshot, regenerated from the live database during the
-Phase 12 security review) directly**, instead of relying on
-`supabase start`'s automatic migration replay:
+## Setup
 
 ```bash
-# 1. Start local Supabase with migration auto-apply disabled, so it comes
-#    up with an empty database instead of failing partway through the
-#    broken chain. In your own LOCAL copy of supabase/config.toml only
-#    (see the port caveat above for why not to commit this):
-#      [db.migrations]
-#      enabled = false
 npx supabase start
-
-# 2. Apply the real, current schema directly (tables + RLS policies),
-#    bypassing the broken incremental chain:
-docker exec -i supabase_db_platform_salma psql -U postgres -d postgres < schema.sql
-
-# 3. Run the test:
 npm run test:rls:local
-# or directly:
-bash scripts/test-rls-local.sh
 ```
 
-This is not a fix for the empty-migration issue — that's a separate,
-pre-existing repository defect (tracked in `docs/PROJECT_ROADMAP.md`'s
-Risks section) that this closure pass deliberately did not attempt to fix
-unprompted, given its scope (effectively reconstructing an initial-schema
-migration) and the project's own documented caution around migration
-history changes (`docs/quality/DATABASE_MIGRATION_POLICY.md`).
+That's it — `supabase start` now bootstraps a fresh local database
+correctly (fixed during the Phase 14 migration-bootstrap pass; see
+"Migration-bootstrap history" below if you're curious what was wrong and
+how it was verified fixed). No manual `schema.sql` application step is
+needed anymore.
 
 ## Running
 
@@ -100,3 +68,39 @@ posture (see `.github/workflows/ci.yml`'s own header comment: "no Supabase
 production linking... nothing here ever reaches a real Supabase... endpoint"),
 adding one was explicitly out of scope for this pass. This test is
 locally reproducible and real; it is not wired into CI.
+
+## Migration-bootstrap history (fixed)
+
+Earlier in Phase 14, `supabase start`'s automatic migration replay failed
+against a genuinely fresh/empty database — `supabase/migrations/20260722092124_name_of_your_migration.sql`,
+the first migration chronologically, was an empty file, so no earlier
+migration ever created the base schema a later one
+(`20260724100000_add_missing_rls_policies.sql`) assumed already existed.
+A deeper audit (the migration-bootstrap fix pass) found the same class of
+problem in three more migrations, each referencing a specific profile
+(`e59f77cf-...`) that only exists as real data on the linked production
+project: `20260724110000_seed_dev_workspace_membership.sql`,
+`20260725100000_phase9_test_second_workspace.sql`, and
+`20260725150000_phase11_verification_workspaces.sql`.
+
+**Both problems are now fixed:**
+
+- The empty first migration now contains a reconstructed initial baseline
+  schema (derived by reversing, via real DDL against a real local
+  Postgres instance, exactly the deltas that later migrations
+  reintroduce — not hand-typed/guessed).
+- The three profile-dependent migrations are now guarded
+  (`WHERE EXISTS (...)` / `IF EXISTS (...)`) so they cleanly no-op on an
+  environment where that profile doesn't exist, with **zero behavior
+  change** on the real linked project (the profile exists there, so the
+  guard condition is always true and the insert proceeds exactly as
+  before).
+
+Verified: a completely fresh local database (destroyed Docker volume,
+`supabase start` from zero) now applies all 15 migrations with zero
+errors, and the resulting schema is **byte-for-byte identical** (`diff`,
+exit code 0) to applying `schema.sql` directly, compared via
+`supabase db dump --local --schema public` on both. This test
+(`rls_workspace_isolation.sql`) passes against that genuinely
+migration-built database, not just against a `schema.sql`-direct-apply
+workaround.
