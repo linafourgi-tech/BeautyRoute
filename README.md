@@ -309,16 +309,14 @@ npx supabase start
 
 Local ports, from this repo's own `supabase/config.toml`: API `54321`,
 Postgres `54322`, Studio `54323`, local email testing (Inbucket) `54324`,
-Analytics `54327`. **Known issue, confirmed during the Phase 14
-handover-closure pass:** `supabase start`'s automatic migration replay
-currently fails against a genuinely fresh/empty database — the first
-migration file is empty, so a later one references a table nothing
-earlier ever created. See `supabase/tests/README.md` for the exact error
-and the workaround (applying `schema.sql` directly). If that doesn't
-affect you, `supabase start` applies all migrations automatically,
-then runs `supabase/seed.sql` (referenced by `config.toml`'s `[db.seed]`
-block). That file intentionally seeds no demo data — see its own header
-comment for why (every meaningful table traces back to `auth.users` via a
+Analytics `54327`. `supabase start` applies all migrations automatically
+against a fresh database (verified end-to-end during the Phase 14
+migration-bootstrap fix — see `supabase/tests/README.md`'s "Migration-
+bootstrap history" section for what was wrong and how the fix was
+proven correct), then runs `supabase/seed.sql` (referenced by
+`config.toml`'s `[db.seed]` block). That file intentionally seeds no
+demo data — see its own header comment for why (every meaningful table
+traces back to `auth.users` via a
 foreign key, and `auth.users` isn't something raw seed SQL should
 populate) — and instead documents the real path: create a user in Studio,
 then complete the normal `/onboarding` flow.
@@ -513,13 +511,6 @@ this README rewrite, per instruction:
 
 - **No project-specific Supabase setup guide exists anywhere in this repo**
   (Section 11 is built from generic, verified CLI mechanics only).
-- **The migration chain cannot bootstrap a fresh database from scratch**
-  (confirmed during the Phase 14 handover-closure pass, building the RLS
-  test in `supabase/tests/` — see that directory's README.md for the full
-  detail and workaround). Anyone following Section 11's `supabase start`
-  path on a brand-new project will hit this. Not fixed here — it needs an
-  initial-schema migration added by someone with authority over this
-  project's migration history.
 - **`src/docs/*.md` are stub files** that read as if they're real reference
   docs but aren't — worth either fleshing out or removing.
 - **No `CONTRIBUTING.md`.** This README's own Contributing section
