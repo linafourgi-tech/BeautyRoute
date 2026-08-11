@@ -14,7 +14,8 @@
     "test:coverage": "vitest run --coverage",
     "security:secret-scan": "bash scripts/secret-scan.sh",
     "security:dependency-audit": "node scripts/dependency-audit.mjs",
-    "perf:bundle-budget": "node scripts/bundle-budget.mjs dist"
+    "perf:bundle-budget": "node scripts/bundle-budget.mjs dist",
+    "test:rls:local": "bash scripts/test-rls-local.sh"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.8",
