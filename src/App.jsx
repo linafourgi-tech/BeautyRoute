@@ -31,6 +31,7 @@ const Login = lazy(() => import("./pages/Login"));
 const Signup = lazy(() => import("./pages/Signup"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const AuthConfirm = lazy(() => import("./pages/AuthConfirm"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const Pricing = lazy(() => import("./pages/Pricing"));
 
@@ -72,6 +73,11 @@ export default function App() {
               <Route path="/signup" element={<Signup />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              {/* Handles every Supabase email-link redirect (magic link,
+                  password recovery, signup confirmation, invite). Must stay
+                  outside ProtectedRoute -- see AuthConfirm.jsx's own header
+                  comment for why. */}
+              <Route path="/auth/confirm" element={<AuthConfirm />} />
               <Route path="/pricing" element={<Pricing />} />
 
               {/* Its own guard: signed in + NOT yet onboarded */}
