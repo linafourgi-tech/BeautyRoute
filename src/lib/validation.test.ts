@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertAllowedFields, assertValidUuid, isValidHttpUrl, isValidUuid, normalizeEmail, trimIfString } from "./validation";
+import { assertAllowedFields, assertValidUuid, isEmailOtpType, isSafeInternalPath, isValidHttpUrl, isValidUuid, normalizeEmail, trimIfString } from "./validation";
 
 describe("isValidUuid", () => {
   it("accepts a well-formed UUID", () => {
@@ -101,5 +101,57 @@ describe("normalizeEmail", () => {
 
   it("leaves an already-normalized email unchanged", () => {
     expect(normalizeEmail("sara@example.com")).toBe("sara@example.com");
+  });
+});
+
+describe("isSafeInternalPath", () => {
+  it("accepts a same-app relative path", () => {
+    expect(isSafeInternalPath("/reset-password")).toBe(true);
+    expect(isSafeInternalPath("/")).toBe(true);
+    expect(isSafeInternalPath("/dashboard?tab=today")).toBe(true);
+  });
+
+  it("rejects an absolute URL to another host -- open-redirect vector", () => {
+    expect(isSafeInternalPath("https://evil.com")).toBe(false);
+    expect(isSafeInternalPath("http://evil.com/phish")).toBe(false);
+  });
+
+  it("rejects a protocol-relative URL -- also an open-redirect vector", () => {
+    expect(isSafeInternalPath("//evil.com")).toBe(false);
+  });
+
+  it("rejects a path that doesn't start with /", () => {
+    expect(isSafeInternalPath("reset-password")).toBe(false);
+  });
+
+  it("rejects a scheme embedded anywhere in the value", () => {
+    expect(isSafeInternalPath("/redirect?to=javascript://alert(1)")).toBe(false);
+  });
+
+  it("rejects empty, missing, or non-string values", () => {
+    expect(isSafeInternalPath("")).toBe(false);
+    expect(isSafeInternalPath(null)).toBe(false);
+    expect(isSafeInternalPath(undefined)).toBe(false);
+    expect(isSafeInternalPath(42)).toBe(false);
+  });
+});
+
+describe("isEmailOtpType", () => {
+  it("accepts every value Supabase's EmailOtpType union allows", () => {
+    for (const type of ["signup", "invite", "magiclink", "recovery", "email_change", "email"]) {
+      expect(isEmailOtpType(type)).toBe(true);
+    }
+  });
+
+  it("rejects an unrecognized or attacker-supplied type value", () => {
+    expect(isEmailOtpType("sms")).toBe(false);
+    expect(isEmailOtpType("phone_change")).toBe(false);
+    expect(isEmailOtpType("admin")).toBe(false);
+  });
+
+  it("rejects empty, missing, or non-string values", () => {
+    expect(isEmailOtpType("")).toBe(false);
+    expect(isEmailOtpType(null)).toBe(false);
+    expect(isEmailOtpType(undefined)).toBe(false);
   });
 });
