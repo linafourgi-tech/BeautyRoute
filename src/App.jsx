@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ProtectedRoute } from "./components/routing/ProtectedRoute";
 import { OnboardingRoute } from "./components/routing/OnboardingRoute";
 import { RouteLoading } from "./components/routing/RouteLoading";
@@ -16,7 +16,6 @@ import { WorkspaceProvider } from "./contexts/WorkspaceContext";
 // there's exactly one loading visual for "we don't have what we need yet
 // to render this route" throughout the app, not a new one invented for
 // this.
-const ServiceSelection = lazy(() => import("./pages/ServiceSelection")); // Our new entry landing page
 const StylistDashboard = lazy(() => import("./pages/StylistDashboard"));
 const Appointments = lazy(() => import("./pages/Appointments"));
 const BeautyPassport = lazy(() => import("./pages/BeautyPassport"));
@@ -47,8 +46,16 @@ export default function App() {
         <WorkspaceProvider>
           <Suspense fallback={<RouteLoading />}>
             <Routes>
-              {/* The first page anyone sees is now the Platform Service Hub */}
-              <Route path="/" element={<ProtectedRoute><ServiceSelection /></ProtectedRoute>} />
+              {/* "/" has no page of its own -- ServiceSelection (the old
+                  "BeautyRoute Platform" module-hub design) was the original
+                  baseline-era landing page and was never actually the
+                  product's real home; StylistDashboard (/dashboard) has
+                  been the intended one since the dashboard was wired to
+                  real data (see Sidebar.jsx's own nav-fix comment). Kept
+                  behind ProtectedRoute exactly as before, so an
+                  unauthenticated visitor still lands on /login first, not
+                  on the redirect target directly. */}
+              <Route path="/" element={<ProtectedRoute><Navigate to="/dashboard" replace /></ProtectedRoute>} />
 
               {/* The modules open up once a service is picked -- all professional-facing,
                   all gated by sign-in + completed onboarding + an active subscription */}
