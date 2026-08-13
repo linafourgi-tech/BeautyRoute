@@ -60,3 +60,28 @@ export function trimIfString<T>(value: T): T | string {
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase()
 }
+
+// Only accepts an internal, same-app path as a post-auth-confirmation
+// redirect target (e.g. a `?next=/reset-password` query param on the
+// /auth/confirm callback route) -- never an absolute URL, a protocol-
+// relative URL (`//evil.com`), or anything else that could send a user off
+// this app immediately after a real Supabase auth confirmation succeeds.
+// That's an open-redirect vector otherwise, since `next` is attacker-
+// influenceable (it comes from a URL query string).
+export function isSafeInternalPath(value: unknown): value is string {
+  if (typeof value !== 'string' || !value) return false
+  if (!value.startsWith('/') || value.startsWith('//')) return false
+  if (value.includes('://')) return false
+  return true
+}
+
+// The exact set of `type` values Supabase's token_hash-based OTP
+// verification accepts for an email link (supabase-js's own EmailOtpType
+// union). Validated here before the value -- read straight from the URL's
+// `type` query param, so attacker-influenceable -- is forwarded to
+// supabase.auth.verifyOtp().
+const EMAIL_OTP_TYPES = new Set(['signup', 'invite', 'magiclink', 'recovery', 'email_change', 'email'])
+
+export function isEmailOtpType(value: unknown): value is string {
+  return typeof value === 'string' && EMAIL_OTP_TYPES.has(value)
+}

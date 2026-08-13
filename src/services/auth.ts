@@ -1,3 +1,4 @@
+import type { EmailOtpType } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import { normalizeEmail } from '../lib/validation'
 
@@ -41,9 +42,18 @@ export async function getCurrentUser() {
 // whether the email is registered here either (no error, no distinct
 // response for an unknown email), so callers must never branch on the
 // result -- always show the same generic confirmation regardless.
+//
+// Routed through the shared /auth/confirm callback (with ?next telling it
+// where to continue afterwards) rather than straight to /reset-password.
+// Supabase's actual recovery-link format (token_hash+type, a PKCE code, or
+// the legacy #access_token fragment) isn't something this app controls or
+// can rely on staying constant -- /auth/confirm is the one place that
+// handles all of them, so this must go through it too instead of assuming
+// ResetPassword.jsx's own page can parse whatever link Supabase happens to
+// send directly.
 export async function requestPasswordReset(email: string) {
   const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmail(email), {
-    redirectTo: `${window.location.origin}/reset-password`,
+    redirectTo: `${window.location.origin}/auth/confirm?next=${encodeURIComponent("/reset-password")}`,
   })
   if (error) throw error
 }
@@ -68,4 +78,25 @@ export function onAuthStateChange(callback: (event: string, session: unknown) =>
 export async function getSession() {
   const { data: { session } } = await supabase.auth.getSession()
   return session
+}
+
+// 9. Confirm an email-based auth link (magic link, password recovery,
+// signup confirmation, invite, email change) using Supabase's token_hash +
+// type verification -- the format Supabase's default hosted email
+// templates currently use. Used by the /auth/confirm callback route, not
+// called directly from any form.
+export async function verifyAuthOtp(tokenHash: string, type: EmailOtpType) {
+  const { data, error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type })
+  if (error) throw error
+  return data
+}
+
+// 10. Confirm an email-based auth link delivered via the PKCE `code` query
+// param instead of token_hash. Also used by /auth/confirm -- which format
+// actually shows up depends on Supabase project/template settings this
+// codebase doesn't control, so both must be supported.
+export async function exchangeAuthCode(code: string) {
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+  if (error) throw error
+  return data
 }
