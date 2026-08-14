@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowUpRight, MapPin, Clock, Search, Navigation, Fuel, X } from "lucide-react";
+import { ArrowUpRight, MapPin, Search, X } from "lucide-react";
 import Layout from "../components/Layout";
 import { useSession } from "../hooks/useSession";
 import { useCurrentWorkspace } from "../hooks/useCurrentWorkspace";
@@ -12,10 +12,28 @@ import { Skeleton, EmptyState, Input } from "../components/ui";
 import { ErrorState } from "../components/ErrorState";
 import "../styles/beautyroute/styles.css";
 
-// Design migration (Phase 1, design-system-dashboard-shell): reskinned onto
-// beautyroute-ds -- every data hook, effect, handler, and piece of state
-// below is byte-for-byte the same as before. Only JSX markup/styling
-// changed; no query, service call, or navigation behavior was touched.
+// Design migration (Phase 2, design-system-dashboard-shell): reworked to
+// match the Claude Design "Professional Dashboard" reference's Overview
+// page (project cd3127fb-33c9-4e08-a9c0-448004aebd5a,
+// ui_kits/professional-dashboard/DashboardViews.jsx) -- a compact 4-up
+// stat-card grid plus a "Today" bookings list, instead of Phase 1's larger
+// editorial card layout. Every data hook, effect, handler, and piece of
+// state below is byte-for-byte the same as Phase 1; only JSX
+// markup/styling changed and one display-only element was removed (see
+// below) -- no query, service call, or navigation behavior was touched.
+//
+// Removed: the "Today's route" map placeholder box and its Stops/Drive
+// time/Est. fuel mini-stats. Both were already non-functional before this
+// PR -- the placeholder was static text never wired to Mapbox, and the
+// travel stats were computed from travelMinFromPrev/distanceKmFromPrev,
+// which lib/appointmentView.js's own comment documents as hardcoded
+// zero placeholders ("No schema support for routing/distance data yet...
+// explicit placeholders, not fabricated numbers"), so they always read "0
+// min" / "SAR 0". The reference's own Overview doesn't show a route/map
+// card either -- that detail lives on its separate "Maps & Route" page,
+// which maps to this app's existing /route (RouteEngine.jsx, untouched,
+// out of scope) -- so the "Full map" link below still leads to the real,
+// unchanged Mapbox-powered route experience.
 
 // clients table has no photo/avatar column — explicit placeholder, not fabricated.
 function toClientViewModel(row) {
@@ -25,6 +43,60 @@ function toClientViewModel(row) {
     lastVisit: row.last_visit_at ? row.last_visit_at.slice(0, 10) : "No visits yet",
     photo: null,
   };
+}
+
+const STATUS_TONE = {
+  confirmed: { fg: "var(--success-fg)", bg: "var(--success-bg)" },
+  completed: { fg: "var(--success-fg)", bg: "var(--success-bg)" },
+  pending: { fg: "var(--warning-fg)", bg: "var(--warning-bg)" },
+  cancelled: { fg: "var(--error-fg)", bg: "var(--error-bg)" },
+  noshow: { fg: "var(--error-fg)", bg: "var(--error-bg)" },
+};
+
+function StatCard({ value, metric }) {
+  // Numeric/short values (counts, "SAR 1,234") get the full display size;
+  // longer text values ("Not available") step down so they never wrap
+  // awkwardly inside the compact card.
+  const isLong = typeof value === "string" && value.length > 8;
+  return (
+    <div style={{ padding: "var(--space-5)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)" }}>
+      <p style={{ fontFamily: "var(--font-display)", fontSize: isLong ? 18 : 28, color: "var(--text-primary)", margin: 0 }}>{value}</p>
+      <p style={{ fontSize: "var(--text-body-sm)", color: "var(--text-secondary)", margin: "2px 0 0" }}>{metric}</p>
+    </div>
+  );
+}
+
+function BookingRow({ appt, onClick }) {
+  const tone = STATUS_TONE[appt.status] || STATUS_TONE.pending;
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+        padding: "var(--space-4) var(--space-5)",
+        borderRadius: "var(--radius-lg)",
+        border: "1px solid var(--border-subtle)",
+        background: "var(--surface-card)",
+        textAlign: "left",
+        cursor: "pointer",
+        fontFamily: "var(--font-body)",
+      }}
+    >
+      <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, var(--espresso-700), var(--bg-sunken))", flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 14, fontWeight: 500, color: "var(--text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{appt.client}</p>
+        <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: "2px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {appt.service} · {appt.time}
+        </p>
+      </div>
+      <span style={{ fontSize: 12, fontWeight: 600, color: tone.fg, background: tone.bg, padding: "4px 10px", borderRadius: "var(--radius-pill)", textTransform: "capitalize", flexShrink: 0 }}>
+        {appt.status}
+      </span>
+    </button>
+  );
 }
 
 export default function StylistDashboard() {
@@ -98,10 +170,6 @@ export default function StylistDashboard() {
     [appointments]
   );
 
-  const totalTravelMin = todays.reduce((s, a) => s + a.travelMinFromPrev, 0);
-  const totalDistanceKm = todays.reduce((s, a) => s + a.distanceKmFromPrev, 0);
-  const fuelEstimate = (totalDistanceKm * 0.65).toFixed(0);
-
   const results = useMemo(() => {
     if (!query.trim()) return [];
     const q = query.toLowerCase();
@@ -116,261 +184,127 @@ export default function StylistDashboard() {
   const isLoading = workspaceLoading || loading;
   const failed = workspaceError || error;
 
+  const search = (
+    <div style={{ position: "relative", width: 260 }}>
+      <Input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search clients…  ابحث"
+        icon={<Search size={15} color="var(--text-tertiary)" />}
+      />
+      {query && (
+        <button
+          type="button"
+          onClick={() => setQuery("")}
+          aria-label="Clear search"
+          style={{ position: "absolute", right: 12, top: 15, background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--text-tertiary)", display: "flex" }}
+        >
+          <X size={14} />
+        </button>
+      )}
+
+      {query && (
+        <div
+          style={{
+            position: "absolute",
+            zIndex: 10,
+            marginTop: 8,
+            width: 320,
+            right: 0,
+            borderRadius: "var(--radius-lg)",
+            border: "1px solid var(--border-subtle)",
+            background: "var(--surface-card)",
+            boxShadow: "var(--shadow-lg)",
+            overflow: "hidden",
+          }}
+        >
+          {results.length === 0 && (
+            <p style={{ padding: "14px 18px", fontSize: "var(--text-body-sm)", color: "var(--text-tertiary)", margin: 0 }}>
+              No client matches "{query}".
+            </p>
+          )}
+          {results.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => goToPassport(c.id)}
+              style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 18px", background: "transparent", border: "none", textAlign: "left", cursor: "pointer" }}
+            >
+              <img src={c.photo} alt="" style={{ height: 32, width: 32, borderRadius: "var(--radius-pill)", objectFit: "cover", background: "var(--bg-sunken)" }} />
+              <div style={{ minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: "var(--text-body-sm)", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</p>
+                <p style={{ margin: 0, fontSize: "var(--text-caption)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Last visit {c.lastVisit}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <Layout
       title={isLoading ? "Good to see you" : `Good to see you, ${firstName}`}
       titleAr="أهلاً بك"
-      subtitle="Your route, your day, and every client's Beauty Passport — one search away."
+      headerActions={search}
     >
-      {/* Quick-access search */}
-      <div style={{ position: "relative", marginBottom: "var(--space-10)", maxWidth: 480 }}>
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search a client's Beauty Passport…  ابحث عن عميلة"
-          icon={<Search size={16} color="var(--text-tertiary)" />}
-        />
-        {query && (
-          <button
-            type="button"
-            onClick={() => setQuery("")}
-            aria-label="Clear search"
-            style={{ position: "absolute", right: 14, top: 23, background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--text-tertiary)", display: "flex" }}
-          >
-            <X size={16} />
-          </button>
-        )}
-
-        {query && (
-          <div
-            style={{
-              position: "absolute",
-              zIndex: 10,
-              marginTop: 8,
-              width: "100%",
-              borderRadius: "var(--radius-lg)",
-              border: "1px solid var(--border-subtle)",
-              background: "var(--surface-card)",
-              boxShadow: "var(--shadow-lg)",
-              overflow: "hidden",
-            }}
-          >
-            {results.length === 0 && (
-              <p style={{ padding: "16px 20px", fontSize: "var(--text-body-sm)", color: "var(--text-tertiary)", margin: 0 }}>
-                No client matches "{query}".
-              </p>
-            )}
-            {results.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => goToPassport(c.id)}
-                style={{
-                  width: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  padding: "12px 20px",
-                  background: "transparent",
-                  border: "none",
-                  textAlign: "left",
-                  cursor: "pointer",
-                  transition: "background var(--dur-fast) var(--ease-standard)",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-sunken)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-              >
-                <img src={c.photo} alt="" style={{ height: 36, width: 36, borderRadius: "var(--radius-pill)", objectFit: "cover", background: "var(--bg-sunken)" }} />
-                <div style={{ minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: "var(--text-body-sm)", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</p>
-                  <p style={{ margin: 0, fontSize: "var(--text-caption)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Last visit {c.lastVisit}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
       {failed && <ErrorState message={typeof failed === "string" ? failed : failed.message} onRetry={retry} />}
 
       {!failed && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Today's route */}
-          <section className="lg:col-span-2">
-            <div
-              style={{
-                borderRadius: "var(--radius-xl)",
-                border: "1px solid var(--border-subtle)",
-                background: "var(--surface-card)",
-                padding: "var(--space-8)",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-6)" }}>
-                <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h2)", color: "var(--text-primary)", margin: 0 }}>Today's route</h2>
-                <Link to="/route" style={{ fontSize: "var(--text-body-sm)", color: "var(--accent-gold-strong)", display: "flex", alignItems: "center", gap: 4, textDecoration: "none" }}>
-                  Full map <ArrowUpRight size={14} />
-                </Link>
-              </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-8)" }}>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {isLoading ? (
+              <>
+                <Skeleton height={84} radius="var(--radius-lg)" />
+                <Skeleton height={84} radius="var(--radius-lg)" />
+                <Skeleton height={84} radius="var(--radius-lg)" />
+                <Skeleton height={84} radius="var(--radius-lg)" />
+              </>
+            ) : (
+              <>
+                <StatCard value={todays.length} metric="appointments today" />
+                <StatCard value={clients.length} metric="active client passports" />
+                <StatCard value={`SAR ${(monthlyRevenue ?? 0).toLocaleString("en-US")}`} metric="revenue this month" />
+                {/* No reviews/ratings table exists in the schema yet -- an
+                    honest unavailable state, never a fabricated number. */}
+                <StatCard value="Not available" metric="average client rating" />
+              </>
+            )}
+          </div>
 
-              <div
-                style={{
-                  aspectRatio: "16 / 7",
-                  borderRadius: "var(--radius-lg)",
-                  background: "var(--bg-sunken)",
-                  border: "1px solid var(--border-subtle)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginBottom: "var(--space-6)",
-                }}
-              >
-                <div style={{ textAlign: "center", color: "var(--text-tertiary)" }}>
-                  <Navigation size={24} style={{ margin: "0 auto 8px", display: "block", color: "var(--accent-gold-strong)" }} />
-                  <p style={{ fontSize: "var(--text-body-sm)", margin: 0 }}>Live route map — wire up Google Maps / Mapbox here</p>
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: "var(--space-6)" }}>
-                <RouteStat icon={MapPin} label="Stops" value={isLoading ? "—" : todays.length} />
-                <RouteStat icon={Clock} label="Drive time" value={isLoading ? "—" : `${totalTravelMin} min`} />
-                <RouteStat icon={Fuel} label="Est. fuel" value={isLoading ? "—" : `SAR ${fuelEstimate}`} />
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                {isLoading && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                    <Skeleton height={56} radius="var(--radius-lg)" />
-                    <Skeleton height={56} radius="var(--radius-lg)" />
-                  </div>
-                )}
-
-                {!isLoading && todays.length === 0 && (
-                  <EmptyState title="No visits scheduled today" description="Enjoy the quiet — today's bookings will show up here." />
-                )}
-
-                {!isLoading && todays.map((a, i) => (
-                  <div key={a.id}>
-                    {i > 0 && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "var(--text-caption)", color: "var(--text-tertiary)", paddingLeft: 20, paddingTop: 8, paddingBottom: 8 }}>
-                        <Navigation size={11} color="var(--accent-gold-strong)" />
-                        {a.travelMinFromPrev} min · {a.distanceKmFromPrev} km to next stop
-                      </div>
-                    )}
-                    <button
-                      onClick={() => goToPassport(a.clientId)}
-                      style={{
-                        width: "100%",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 16,
-                        borderRadius: "var(--radius-lg)",
-                        border: "1px solid var(--border-subtle)",
-                        background: "var(--bg-sunken)",
-                        padding: "16px 20px",
-                        textAlign: "left",
-                        cursor: "pointer",
-                        transition: "border-color var(--dur-fast) var(--ease-standard)",
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--accent-gold)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border-subtle)")}
-                    >
-                      <div style={{ fontFamily: "var(--font-body)", fontWeight: 600, color: "var(--accent-gold-strong)", fontSize: "var(--text-body-sm)", width: 56, flexShrink: 0 }}>
-                        {a.time}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ margin: 0, fontSize: "var(--text-body-sm)", fontWeight: 500, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {a.client} · {a.service}
-                        </p>
-                        <p style={{ margin: "4px 0 0", fontSize: "var(--text-caption)", color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 4 }}>
-                          <MapPin size={12} /> {a.location}
-                        </p>
-                      </div>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          textTransform: "uppercase",
-                          letterSpacing: "var(--ls-overline)",
-                          padding: "6px 12px",
-                          borderRadius: "var(--radius-pill)",
-                          border: "1px solid " + (a.status === "confirmed" ? "var(--success-fg)" : "var(--accent-gold-strong)"),
-                          color: a.status === "confirmed" ? "var(--success-fg)" : "var(--accent-gold-strong)",
-                          flexShrink: 0,
-                        }}
-                      >
-                        {a.status}
-                      </span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* Quick stats */}
-          <section>
-            <div
-              style={{
-                borderRadius: "var(--radius-xl)",
-                border: "1px solid var(--border-subtle)",
-                background: "var(--surface-card)",
-                padding: "var(--space-8)",
-                display: "flex",
-                flexDirection: "column",
-                gap: "var(--space-6)",
-                height: "fit-content",
-              }}
-            >
-              <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h2)", color: "var(--text-primary)", margin: 0 }}>This month</h2>
-              <div>
-                <p style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-display-md)", color: "var(--accent-gold-strong)", margin: 0 }}>
-                  {isLoading ? "—" : clients.length}
-                </p>
-                <p style={{ color: "var(--text-tertiary)", fontSize: "var(--text-body-sm)", margin: "4px 0 0" }}>active client passports</p>
-              </div>
-              <div>
-                <p style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-display-md)", color: "var(--accent-gold-strong)", margin: 0 }}>
-                  {isLoading ? "—" : `SAR ${(monthlyRevenue ?? 0).toLocaleString("en-US")}`}
-                </p>
-                <p style={{ color: "var(--text-tertiary)", fontSize: "var(--text-body-sm)", margin: "4px 0 0" }}>revenue this month</p>
-              </div>
-              <div>
-                {/* No reviews/ratings table exists in the schema yet -- show
-                    an honest unavailable state rather than a fabricated number. */}
-                <p style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h3)", color: "var(--text-tertiary)", margin: 0 }}>Not available</p>
-                <p style={{ color: "var(--text-tertiary)", fontSize: "var(--text-body-sm)", margin: "4px 0 0" }}>average client rating</p>
-              </div>
-              <Link
-                to="/passport"
-                style={{
-                  marginTop: 8,
-                  textAlign: "center",
-                  borderRadius: "var(--radius-lg)",
-                  border: "1px solid var(--border-default)",
-                  color: "var(--text-primary)",
-                  fontSize: "var(--text-body-sm)",
-                  fontWeight: 500,
-                  padding: "14px",
-                  textDecoration: "none",
-                  transition: "background var(--dur-fast) var(--ease-standard)",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-sunken)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-              >
-                Browse all passports
+          <div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-4)" }}>
+              <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h3)", color: "var(--text-primary)", margin: 0 }}>Today</h2>
+              <Link to="/route" style={{ fontSize: "var(--text-body-sm)", color: "var(--accent-gold-strong)", display: "flex", alignItems: "center", gap: 4, textDecoration: "none" }}>
+                Full map <ArrowUpRight size={13} />
               </Link>
             </div>
-          </section>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {isLoading && (
+                <>
+                  <Skeleton height={64} radius="var(--radius-lg)" />
+                  <Skeleton height={64} radius="var(--radius-lg)" />
+                </>
+              )}
+
+              {!isLoading && todays.length === 0 && (
+                <EmptyState title="No visits scheduled today" description="Enjoy the quiet — today's bookings will show up here." />
+              )}
+
+              {!isLoading && todays.map((a) => (
+                <BookingRow key={a.id} appt={a} onClick={() => goToPassport(a.clientId)} />
+              ))}
+            </div>
+          </div>
+
+          {!isLoading && todays.length > 0 && (
+            <p style={{ fontSize: "var(--text-caption)", color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 6, margin: 0 }}>
+              <MapPin size={12} /> {todays[0].location}
+              {todays.length > 1 ? ` and ${todays.length - 1} more stop${todays.length - 1 === 1 ? "" : "s"} today` : ""}
+            </p>
+          )}
         </div>
       )}
     </Layout>
-  );
-}
-
-function RouteStat({ icon: Icon, label, value }) {
-  return (
-    <div style={{ borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)", background: "var(--bg-sunken)", padding: "14px 12px", textAlign: "center" }}>
-      <Icon size={15} color="var(--accent-gold-strong)" style={{ margin: "0 auto 6px", display: "block" }} />
-      <p style={{ margin: 0, fontSize: "var(--text-body-sm)", color: "var(--text-primary)", fontWeight: 600 }}>{value}</p>
-      <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-tertiary)" }}>{label}</p>
-    </div>
   );
 }

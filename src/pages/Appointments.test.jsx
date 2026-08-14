@@ -117,9 +117,15 @@ describe("Appointments page", () => {
     expect(screen.queryByText("Bayan Saleh")).not.toBeInTheDocument();
 
     // Day tabs render before the "New booking" button in DOM order, so the
-    // second button here is the second day's tab -- avoids depending on the
-    // exact locale-formatted date label text.
-    const dayTabs = screen.getAllByRole("button").filter((b) => b.textContent !== "New booking");
+    // second remaining button here is the second day's tab -- avoids
+    // depending on the exact locale-formatted date label text. Also
+    // excludes Sidebar's own chrome buttons (its mobile "Open navigation"
+    // toggle and account-footer "Log out", added in the design-system-
+    // dashboard-shell migration) -- both carry an aria-label, which neither
+    // a day tab nor "New booking" does, so filtering those out keeps this
+    // scoped to Appointments' own controls regardless of what Layout's
+    // shared chrome renders around it.
+    const dayTabs = screen.getAllByRole("button").filter((b) => b.textContent !== "New booking" && !b.hasAttribute("aria-label"));
     await user.click(dayTabs[1]);
 
     expect(await screen.findByText("Bayan Saleh")).toBeInTheDocument();
