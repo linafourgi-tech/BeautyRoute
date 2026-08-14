@@ -1,17 +1,22 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { render, screen, within } from "@testing-library/react";
+import { MemoryRouter, Routes, Route } from "react-router-dom";
+import userEvent from "@testing-library/user-event";
 
-// New safety net (Phase 1 design migration, design-system-dashboard-shell):
-// Sidebar had no test file before this reskin. These tests lock in the
+// Safety net (Phase 1 design migration; extended in Phase 2 for the
+// mobile drawer and logout added while matching the Claude Design
+// "Professional Dashboard" reference). These tests lock in the
 // behavioral contract -- routes, bilingual labels, active-state, workspace
-// switching, account display -- that must survive the visual-only change
-// from src/index.css's old Tailwind theme to beautyroute-ds.
+// switching, account display, mobile navigation, sign-out -- across both
+// the Phase 1 beautyroute-ds reskin and the Phase 2 density/dark-theme
+// rework.
 const useSessionMock = vi.fn();
 const useWorkspaceContextMock = vi.fn();
+const signOutUserMock = vi.fn();
 
 vi.mock("../hooks/useSession", () => ({ useSession: () => useSessionMock() }));
 vi.mock("../contexts/useWorkspaceContext", () => ({ useWorkspaceContext: () => useWorkspaceContextMock() }));
+vi.mock("../services/auth", () => ({ signOutUser: (...args) => signOutUserMock(...args) }));
 
 import Sidebar from "./Sidebar";
 
@@ -31,7 +36,10 @@ const EXPECTED_ROUTES = [
 function renderSidebar({ initialEntry = "/dashboard" } = {}) {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
-      <Sidebar />
+      <Routes>
+        <Route path="/login" element={<div>Login page</div>} />
+        <Route path="*" element={<Sidebar />} />
+      </Routes>
     </MemoryRouter>
   );
 }
@@ -40,6 +48,8 @@ describe("Sidebar", () => {
   beforeEach(() => {
     useSessionMock.mockReset();
     useWorkspaceContextMock.mockReset();
+    signOutUserMock.mockReset();
+    signOutUserMock.mockResolvedValue(undefined);
     useSessionMock.mockReturnValue({ profile: { full_name: "Sara Al-Otaibi" } });
     useWorkspaceContextMock.mockReturnValue({
       workspaces: [{ id: "ws-1", name: "Sara's Studio" }],
@@ -133,5 +143,82 @@ describe("Sidebar", () => {
     const link = screen.getByRole("link", { name: /Clients/ });
     expect(link.tagName).toBe("A");
     expect(link).toHaveAttribute("href", "/clients");
+  });
+
+  describe("mobile navigation drawer", () => {
+    it("does not render the drawer dialog until the hamburger is opened -- no permanent-hidden trap, but no unwanted overlay either", () => {
+      renderSidebar();
+      expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument();
+    });
+
+    it("opens a real navigation dialog containing every route when the mobile hamburger is pressed", async () => {
+      const user = userEvent.setup();
+      renderSidebar();
+
+      await user.click(screen.getByRole("button", { name: "Open navigation" }));
+
+      const dialog = screen.getByRole("dialog", { name: "Navigation" });
+      expect(dialog).toBeInTheDocument();
+      for (const [label, href] of EXPECTED_ROUTES) {
+        expect(within(dialog).getByRole("link", { name: new RegExp(label) })).toHaveAttribute("href", href);
+      }
+    });
+
+    it("closes the drawer when its backdrop is clicked", async () => {
+      const user = userEvent.setup();
+      renderSidebar();
+      await user.click(screen.getByRole("button", { name: "Open navigation" }));
+      expect(screen.getByRole("dialog", { name: "Navigation" })).toBeInTheDocument();
+
+      // The backdrop is the dialog's first child (a full-bleed overlay
+      // behind the drawer panel), not a labeled control -- click it
+      // directly rather than adding a synthetic test-only button.
+      const dialog = screen.getByRole("dialog", { name: "Navigation" });
+      await user.click(dialog.firstChild);
+
+      expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument();
+    });
+
+    it("closes the drawer when its own close button is clicked", async () => {
+      const user = userEvent.setup();
+      renderSidebar();
+      await user.click(screen.getByRole("button", { name: "Open navigation" }));
+      await user.click(screen.getByRole("button", { name: "Close navigation" }));
+      expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument();
+    });
+
+    it("closes the drawer after navigating to a route from inside it", async () => {
+      const user = userEvent.setup();
+      renderSidebar();
+      await user.click(screen.getByRole("button", { name: "Open navigation" }));
+      const dialog = screen.getByRole("dialog", { name: "Navigation" });
+
+      await user.click(within(dialog).getByRole("link", { name: /Clients/ }));
+
+      expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument();
+    });
+  });
+
+  describe("logout", () => {
+    it("calls the real signOutUser() service and redirects to /login on success", async () => {
+      const user = userEvent.setup();
+      renderSidebar();
+
+      await user.click(screen.getByRole("button", { name: "Log out" }));
+
+      expect(signOutUserMock).toHaveBeenCalledTimes(1);
+      expect(await screen.findByText("Login page")).toBeInTheDocument();
+    });
+
+    it("shows an error and does not navigate away when sign-out fails", async () => {
+      signOutUserMock.mockRejectedValue(new Error("Network error"));
+      const user = userEvent.setup();
+      renderSidebar();
+
+      await user.click(screen.getByRole("button", { name: "Log out" }));
+
+      expect(await screen.findByText("Network error")).toBeInTheDocument();
+      expect(screen.queryByText("Login page")).not.toBeInTheDocument();
+    });
   });
 });
