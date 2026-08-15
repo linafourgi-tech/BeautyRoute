@@ -59,20 +59,24 @@ export default function RouteMap({ stops, start, end, geometry, conflictIds }) {
     const points = [];
 
     if (start) {
-      const el = markerEl("S", "#4b5563");
+      const el = markerEl("S", "#3C2F23");
       markersRef.current.push(new mapboxgl.Marker({ element: el }).setLngLat([start.lng, start.lat]).addTo(map));
       points.push([start.lng, start.lat]);
     }
 
     stops.forEach((s, i) => {
       const hasConflict = conflictIds?.has(s.id);
-      const el = markerEl(String(i + 1), hasConflict ? "#dc2626" : "#7a2946");
+      // Marker pins are drawn directly onto the Mapbox canvas via plain DOM
+      // elements, outside React/CSS -- CSS custom properties can't reach
+      // here, so these are the beautyroute-ds gold/error token values as
+      // literal hex (tokens/colors.css: --gold-500, --error-500).
+      const el = markerEl(String(i + 1), hasConflict ? "#B0453E" : "#B8942C");
       markersRef.current.push(new mapboxgl.Marker({ element: el }).setLngLat([s.lng, s.lat]).addTo(map));
       points.push([s.lng, s.lat]);
     });
 
     if (end) {
-      const el = markerEl("E", "#4b5563");
+      const el = markerEl("E", "#3C2F23");
       markersRef.current.push(new mapboxgl.Marker({ element: el }).setLngLat([end.lng, end.lat]).addTo(map));
       points.push([end.lng, end.lat]);
     }
@@ -87,7 +91,7 @@ export default function RouteMap({ stops, start, end, geometry, conflictIds }) {
         type: "line",
         source: "route-line",
         layout: { "line-join": "round", "line-cap": "round" },
-        paint: { "line-color": "#7a2946", "line-width": 4, "line-opacity": 0.75 },
+        paint: { "line-color": "#B8942C", "line-width": 4, "line-opacity": 0.75 },
       });
     }
 
@@ -104,16 +108,16 @@ export default function RouteMap({ stops, start, end, geometry, conflictIds }) {
 
   if (!PUBLIC_TOKEN) {
     return (
-      <div className="aspect-[16/10] rounded-xl bg-surface-2 border border-line flex items-center justify-center">
-        <div className="text-center text-muted px-6">
-          <Navigation size={28} className="mx-auto mb-2 text-gold" />
+      <div className="aspect-[16/10] rounded-xl flex items-center justify-center" style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)" }}>
+        <div className="text-center px-6" style={{ color: "var(--text-tertiary)" }}>
+          <Navigation size={28} className="mx-auto mb-2" style={{ color: "var(--accent-gold-strong)" }} />
           <p className="text-sm">Map isn't configured yet — ask your workspace owner to set up the maps provider.</p>
         </div>
       </div>
     );
   }
 
-  return <div ref={containerRef} className="aspect-[16/10] rounded-xl border border-line overflow-hidden" />;
+  return <div ref={containerRef} className="aspect-[16/10] rounded-xl overflow-hidden" style={{ border: "1px solid var(--border-subtle)" }} />;
 }
 
 function markerEl(label, color) {

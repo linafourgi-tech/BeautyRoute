@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Search, Trash2, Pencil, BookHeart } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Plus, Search, Trash2, Pencil, BookHeart } from "lucide-react";
+import Layout from "../components/Layout";
 import { useCurrentWorkspace } from "../hooks/useCurrentWorkspace";
 import { getClients, createClient, updateClient, deleteClient } from "../services/clients";
 import { Button, Input, Select, Dialog, Skeleton, EmptyState } from "../components/ui";
@@ -153,81 +154,73 @@ export default function Clients() {
   const failed = workspaceError || error;
 
   return (
-    <div className="beautyroute-ds" style={{ minHeight: "100vh", background: "var(--bg-page)", fontFamily: "var(--font-body)" }}>
-      <div style={{ maxWidth: 880, margin: "0 auto", padding: "var(--space-10) var(--space-6)" }}>
-        <Link to="/dashboard" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--text-tertiary)", textDecoration: "none", marginBottom: 24 }}>
-          <ArrowLeft size={14} /> Back to dashboard
-        </Link>
-
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, gap: 16 }}>
-          <div>
-            <h1 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-display-md)", color: "var(--text-primary)", margin: 0 }}>Clients</h1>
-            <p style={{ fontSize: 14, color: "var(--text-tertiary)", margin: "4px 0 0" }}>Everyone you've worked with, in one place.</p>
-          </div>
-          <Button variant="gold" icon={<Plus size={16} />} onClick={openCreate}>New client</Button>
-        </div>
-
-        {!failed && (
-          <div style={{ marginBottom: 20 }}>
-            <Input
-              icon={<Search size={15} style={{ color: "var(--text-tertiary)" }} />}
-              placeholder="Search by name, phone, or email"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </div>
-        )}
-
-        {failed && <ErrorState message={typeof failed === "string" ? failed : failed.message} onRetry={retry} />}
-
-        {!failed && isLoading && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <Skeleton height={56} radius="var(--radius-lg)" />
-            <Skeleton height={56} radius="var(--radius-lg)" />
-            <Skeleton height={56} radius="var(--radius-lg)" />
-          </div>
-        )}
-
-        {!failed && !isLoading && filtered.length === 0 && (
-          <EmptyState
-            title={query ? "No clients match your search" : "No clients yet"}
-            description={query ? "Try a different name, phone, or email." : "Add your first client to get started."}
-            action={!query && <Button variant="gold" onClick={openCreate}>Add a client</Button>}
+    <Layout
+      title="Clients"
+      titleAr="العملاء"
+      subtitle="Everyone you've worked with, in one place."
+      headerActions={<Button variant="gold" icon={<Plus size={16} />} onClick={openCreate}>New client</Button>}
+    >
+      {!failed && (
+        <div style={{ marginBottom: 20, maxWidth: 420 }}>
+          <Input
+            icon={<Search size={15} style={{ color: "var(--text-tertiary)" }} />}
+            placeholder="Search by name, phone, or email"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
           />
-        )}
+        </div>
+      )}
 
-        {!failed && !isLoading && filtered.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {filtered.map((client) => (
-              <div
-                key={client.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 16,
-                  padding: "16px 20px",
-                  background: "var(--surface-card)",
-                  border: "1px solid var(--border-subtle)",
-                  borderRadius: "var(--radius-lg)",
-                }}
-              >
-                <div style={{ minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>{client.full_name}</p>
-                  <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--text-tertiary)" }}>
-                    {[client.phone, client.email].filter(Boolean).join(" · ") || "No contact info on file"} · {client.tier}
-                  </p>
-                </div>
-                <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-                  <Button variant="secondary" size="sm" icon={<BookHeart size={13} />} onClick={() => navigate(`/passport?client=${client.id}`)}>Passport</Button>
-                  <Button variant="secondary" size="sm" icon={<Pencil size={13} />} onClick={() => openEdit(client)}>Edit</Button>
-                  <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => { setDeleteTarget(client); setDeleteError(""); }}>Delete</Button>
-                </div>
+      {failed && <ErrorState message={typeof failed === "string" ? failed : failed.message} onRetry={retry} />}
+
+      {!failed && isLoading && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <Skeleton height={56} radius="var(--radius-lg)" />
+          <Skeleton height={56} radius="var(--radius-lg)" />
+          <Skeleton height={56} radius="var(--radius-lg)" />
+        </div>
+      )}
+
+      {!failed && !isLoading && filtered.length === 0 && (
+        <EmptyState
+          title={query ? "No clients match your search" : "No clients yet"}
+          description={query ? "Try a different name, phone, or email." : "Add your first client to get started."}
+          action={!query && <Button variant="gold" onClick={openCreate}>Add a client</Button>}
+        />
+      )}
+
+      {!failed && !isLoading && filtered.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {filtered.map((client) => (
+            <div
+              key={client.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 16,
+                flexWrap: "wrap",
+                padding: "16px 20px",
+                background: "var(--surface-card)",
+                border: "1px solid var(--border-subtle)",
+                borderRadius: "var(--radius-lg)",
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>{client.full_name}</p>
+                <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--text-tertiary)" }}>
+                  {[client.phone, client.email].filter(Boolean).join(" · ") || "No contact info on file"} · {client.tier}
+                </p>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+              <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                <Button variant="secondary" size="sm" icon={<BookHeart size={13} />} onClick={() => navigate(`/passport?client=${client.id}`)}>Passport</Button>
+                <Button variant="secondary" size="sm" icon={<Pencil size={13} />} onClick={() => openEdit(client)}>Edit</Button>
+                <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => { setDeleteTarget(client); setDeleteError(""); }}>Delete</Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <Dialog
         open={formOpen}
@@ -266,6 +259,6 @@ export default function Clients() {
         </p>
         {deleteError && <p style={{ margin: "10px 0 0", fontSize: 13, color: "var(--error-fg)" }}>{deleteError}</p>}
       </Dialog>
-    </div>
+    </Layout>
   );
 }
