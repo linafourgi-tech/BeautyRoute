@@ -204,7 +204,7 @@ export default function Services() {
     <Layout
       title="Services"
       titleAr="الخدمات"
-      subtitle="What you offer, and what it costs."
+      subtitle={isLoading ? "What you offer, and what it costs." : `${services.length} service${services.length === 1 ? "" : "s"} · what you offer, and what it costs.`}
       headerActions={
         <div style={{ display: "flex", gap: 10 }}>
           <Button variant="secondary" onClick={openImport}>Import templates</Button>
@@ -231,11 +231,11 @@ export default function Services() {
 
       {!failed && !isLoading && services.length > 0 &&
         Object.entries(grouped).map(([category, rows]) => (
-          <div key={category} style={{ marginBottom: 24 }}>
-            <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-overline)", color: "var(--text-tertiary)", margin: "0 0 10px" }}>
+          <div key={category} style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-overline)", color: "var(--text-tertiary)", margin: "0 0 8px" }}>
               {category}
             </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {rows.map((service) => (
                 <div
                   key={service.id}
@@ -245,7 +245,7 @@ export default function Services() {
                     justifyContent: "space-between",
                     gap: 16,
                     flexWrap: "wrap",
-                    padding: "14px 20px",
+                    padding: "12px 18px",
                     background: "var(--surface-card)",
                     border: "1px solid var(--border-subtle)",
                     borderRadius: "var(--radius-lg)",

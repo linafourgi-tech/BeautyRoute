@@ -93,7 +93,7 @@ describe("Clients page", () => {
     renderClients();
     await screen.findByText("Amira Al-Fahad");
 
-    await user.type(screen.getByPlaceholderText("Search by name, phone, or email"), "bayan");
+    await user.type(screen.getByPlaceholderText("Search clients…"), "bayan");
     expect(screen.queryByText("Amira Al-Fahad")).not.toBeInTheDocument();
     expect(screen.getByText("Bayan Saleh")).toBeInTheDocument();
   });
@@ -104,7 +104,7 @@ describe("Clients page", () => {
     renderClients();
     await screen.findByText("Amira Al-Fahad");
 
-    await user.type(screen.getByPlaceholderText("Search by name, phone, or email"), "nobody-like-this");
+    await user.type(screen.getByPlaceholderText("Search clients…"), "nobody-like-this");
     expect(screen.getByText("No clients match your search")).toBeInTheDocument();
   });
 
