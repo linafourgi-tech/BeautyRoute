@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { ArrowLeft, Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
+import Layout from "../components/Layout";
 import { useCurrentWorkspace } from "../hooks/useCurrentWorkspace";
 import { getServices, createService, updateService, deleteService, importServiceTemplates } from "../services/services";
 import { getServiceTemplates } from "../services/serviceTemplates";
@@ -201,79 +201,73 @@ export default function Services() {
   const failed = workspaceError || error;
 
   return (
-    <div className="beautyroute-ds" style={{ minHeight: "100vh", background: "var(--bg-page)", fontFamily: "var(--font-body)" }}>
-      <div style={{ maxWidth: 880, margin: "0 auto", padding: "var(--space-10) var(--space-6)" }}>
-        <Link to="/dashboard" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--text-tertiary)", textDecoration: "none", marginBottom: 24 }}>
-          <ArrowLeft size={14} /> Back to dashboard
-        </Link>
-
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, gap: 16, flexWrap: "wrap" }}>
-          <div>
-            <h1 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-display-md)", color: "var(--text-primary)", margin: 0 }}>Services</h1>
-            <p style={{ fontSize: 14, color: "var(--text-tertiary)", margin: "4px 0 0" }}>What you offer, and what it costs.</p>
-          </div>
-          <div style={{ display: "flex", gap: 10 }}>
-            <Button variant="secondary" onClick={openImport}>Import templates</Button>
-            <Button variant="gold" icon={<Plus size={16} />} onClick={openCreate}>New service</Button>
-          </div>
+    <Layout
+      title="Services"
+      titleAr="الخدمات"
+      subtitle="What you offer, and what it costs."
+      headerActions={
+        <div style={{ display: "flex", gap: 10 }}>
+          <Button variant="secondary" onClick={openImport}>Import templates</Button>
+          <Button variant="gold" icon={<Plus size={16} />} onClick={openCreate}>New service</Button>
         </div>
+      }
+    >
+      {failed && <ErrorState message={typeof failed === "string" ? failed : failed.message} onRetry={retry} />}
 
-        {failed && <ErrorState message={typeof failed === "string" ? failed : failed.message} onRetry={retry} />}
+      {!failed && isLoading && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <Skeleton height={56} radius="var(--radius-lg)" />
+          <Skeleton height={56} radius="var(--radius-lg)" />
+        </div>
+      )}
 
-        {!failed && isLoading && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <Skeleton height={56} radius="var(--radius-lg)" />
-            <Skeleton height={56} radius="var(--radius-lg)" />
-          </div>
-        )}
+      {!failed && !isLoading && services.length === 0 && (
+        <EmptyState
+          title="No services yet"
+          description="Create your own, or import from the starter catalog to get going fast."
+          action={<Button variant="gold" onClick={openImport}>Import templates</Button>}
+        />
+      )}
 
-        {!failed && !isLoading && services.length === 0 && (
-          <EmptyState
-            title="No services yet"
-            description="Create your own, or import from the starter catalog to get going fast."
-            action={<Button variant="gold" onClick={openImport}>Import templates</Button>}
-          />
-        )}
-
-        {!failed && !isLoading && services.length > 0 &&
-          Object.entries(grouped).map(([category, rows]) => (
-            <div key={category} style={{ marginBottom: 24 }}>
-              <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-overline)", color: "var(--text-tertiary)", margin: "0 0 10px" }}>
-                {category}
-              </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {rows.map((service) => (
-                  <div
-                    key={service.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 16,
-                      padding: "14px 20px",
-                      background: "var(--surface-card)",
-                      border: "1px solid var(--border-subtle)",
-                      borderRadius: "var(--radius-lg)",
-                      opacity: service.is_active ? 1 : 0.55,
-                    }}
-                  >
-                    <div style={{ minWidth: 0 }}>
-                      <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>{service.name}</p>
-                      <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--text-tertiary)" }}>
-                        {service.duration_minutes} min · SAR {service.price}
-                      </p>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
-                      <Switch checked={service.is_active} onChange={() => toggleActive(service)} label="Active" />
-                      <Button variant="secondary" size="sm" icon={<Pencil size={13} />} onClick={() => openEdit(service)}>Edit</Button>
-                      <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => { setDeleteTarget(service); setDeleteError(""); }}>Delete</Button>
-                    </div>
+      {!failed && !isLoading && services.length > 0 &&
+        Object.entries(grouped).map(([category, rows]) => (
+          <div key={category} style={{ marginBottom: 24 }}>
+            <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-overline)", color: "var(--text-tertiary)", margin: "0 0 10px" }}>
+              {category}
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {rows.map((service) => (
+                <div
+                  key={service.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 16,
+                    flexWrap: "wrap",
+                    padding: "14px 20px",
+                    background: "var(--surface-card)",
+                    border: "1px solid var(--border-subtle)",
+                    borderRadius: "var(--radius-lg)",
+                    opacity: service.is_active ? 1 : 0.55,
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>{service.name}</p>
+                    <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--text-tertiary)" }}>
+                      {service.duration_minutes} min · SAR {service.price}
+                    </p>
                   </div>
-                ))}
-              </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
+                    <Switch checked={service.is_active} onChange={() => toggleActive(service)} label="Active" />
+                    <Button variant="secondary" size="sm" icon={<Pencil size={13} />} onClick={() => openEdit(service)}>Edit</Button>
+                    <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => { setDeleteTarget(service); setDeleteError(""); }}>Delete</Button>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-      </div>
+          </div>
+        ))}
 
       <Dialog
         open={formOpen}
@@ -340,6 +334,6 @@ export default function Services() {
           </div>
         )}
       </Dialog>
-    </div>
+    </Layout>
   );
 }
