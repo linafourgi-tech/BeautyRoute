@@ -11,8 +11,38 @@ export type Subscription = {
   trial_ends_at: string | null
 }
 
+// Performance fix (full-product-design-migration navigation-lag
+// investigation): useSubscription(workspaceId) is called independently by
+// ProtectedRoute, TrialBanner (inside Layout), and -- on RouteEngine,
+// AIEngine, BeautyPassport, Pricing -- the page itself too. On a single
+// page load that's up to 3 simultaneous, identical
+// `getSubscription(workspaceId)` calls, each its own real Supabase round
+// trip, contributing directly to perceived navigation lag. Rather than
+// restructure useSubscription into a context (a bigger change to its
+// public contract, and to the already-passing hook-level test that fetches
+// per arbitrary workspaceId, not a single "current" one), this coalesces
+// only genuinely-concurrent in-flight requests for the same workspaceId
+// into one real network call -- every caller still awaits its own promise
+// and gets the same result, but only one request reaches Supabase. Once a
+// request settles it's removed from the map, so it never serves stale data
+// across separate, non-overlapping calls (e.g. after selectWorkspace()
+// changes workspaceId, or on a later navigation) -- this is safe,
+// short-lived request coalescing, not a cache.
+const inFlightSubscriptionRequests = new Map<string, Promise<Subscription>>()
+
 // 1. Get a workspace's subscription-relevant fields
-export async function getSubscription(workspaceId: string): Promise<Subscription> {
+export function getSubscription(workspaceId: string): Promise<Subscription> {
+  const existing = inFlightSubscriptionRequests.get(workspaceId)
+  if (existing) return existing
+
+  const request = fetchSubscription(workspaceId).finally(() => {
+    inFlightSubscriptionRequests.delete(workspaceId)
+  })
+  inFlightSubscriptionRequests.set(workspaceId, request)
+  return request
+}
+
+async function fetchSubscription(workspaceId: string): Promise<Subscription> {
   const { data, error } = await supabase
     .from('workspaces')
     .select('id, plan_tier, subscription_status, trial_started_at, trial_ends_at')

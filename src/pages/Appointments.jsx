@@ -282,15 +282,15 @@ export default function Appointments() {
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 20,
+                gap: 16,
                 flexWrap: "wrap",
-                padding: "var(--space-5)",
+                padding: "14px var(--space-5)",
                 background: "var(--surface-card)",
                 border: "1px solid var(--border-subtle)",
                 borderRadius: "var(--radius-lg)",
               }}
             >
-              <div style={{ textAlign: "center", flexShrink: 0, width: 64 }}>
+              <div style={{ textAlign: "center", flexShrink: 0, width: 56 }}>
                 <p style={{ margin: 0, fontFamily: "var(--font-body)", fontWeight: 600, color: "var(--accent-gold-strong)", fontSize: "var(--text-body)", lineHeight: 1 }}>{a.time}</p>
               </div>
               <button
@@ -355,7 +355,12 @@ export default function Appointments() {
             right service" kind of test a real .closest("form") to scope
             into, exactly like the previous hand-built modal did. */}
         <form onSubmit={handleSubmit}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* Composition pass: tighter inter-field rhythm (10px, not 14),
+              and Status+Location share a row -- both are short single-line
+              fields, and stacking them full-width was exactly the kind of
+              unnecessary extra height that made this dialog read as
+              oversized rather than a compact, operational form. */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <Select
               label="Client"
               value={form.clientId}
@@ -363,16 +368,16 @@ export default function Appointments() {
               placeholder="Select a client…"
               options={clients.map((c) => ({ value: c.id, label: c.full_name }))}
             />
-            {formErrors.clientId && <p style={{ margin: "-8px 0 0", fontSize: 12, color: "var(--error-fg)" }}>{formErrors.clientId}</p>}
+            {formErrors.clientId && <p style={{ margin: "-6px 0 0", fontSize: 12, color: "var(--error-fg)" }}>{formErrors.clientId}</p>}
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <Input label="Date" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} error={formErrors.date} />
               <Input label="Start time" type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} error={formErrors.time} />
             </div>
 
             <fieldset style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-              <legend style={{ display: "block", width: "100%", padding: 0, fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 8 }}>Services</legend>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <legend style={{ display: "block", width: "100%", padding: 0, fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>Services</legend>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {services.length === 0 && <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: 0 }}>No active services yet.</p>}
                 {services.map((s) => (
                   <Tag key={s.id} selected={form.serviceIds.includes(s.id)} onClick={() => toggleService(s.id)}>
@@ -382,9 +387,10 @@ export default function Appointments() {
               </div>
             </fieldset>
 
-            <Select label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} options={STATUSES} />
-
-            <Input label="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Al Narjis, Riyadh" />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 10 }}>
+              <Select label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} options={STATUSES} />
+              <Input label="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Al Narjis, Riyadh" />
+            </div>
 
             {formError && <p style={{ margin: 0, fontSize: 13, color: "var(--error-fg)" }}>{formError}</p>}
           </div>

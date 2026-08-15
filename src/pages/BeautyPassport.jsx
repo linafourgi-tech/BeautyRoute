@@ -331,9 +331,9 @@ export default function BeautyPassport() {
 
         {/* Storybook */}
         {client && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-8)" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
             {/* Cover */}
-            <div style={{ borderRadius: "var(--radius-xl)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", padding: "var(--space-8)" }}>
+            <div style={{ borderRadius: "var(--radius-xl)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", padding: "var(--space-6)" }}>
               <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 20 }}>
                 <div style={{ height: 76, width: 76, borderRadius: "50%", background: "var(--bg-sunken)", border: "3px solid var(--bg-sunken)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontSize: 26, color: "var(--accent-gold-strong)", flexShrink: 0 }}>
                   {initials(client.full_name)}
