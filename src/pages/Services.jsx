@@ -215,7 +215,7 @@ export default function Services() {
       {failed && <ErrorState message={typeof failed === "string" ? failed : failed.message} onRetry={retry} />}
 
       {!failed && isLoading && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 760 }}>
           <Skeleton height={56} radius="var(--radius-lg)" />
           <Skeleton height={56} radius="var(--radius-lg)" />
         </div>
@@ -229,45 +229,51 @@ export default function Services() {
         />
       )}
 
-      {!failed && !isLoading && services.length > 0 &&
-        Object.entries(grouped).map(([category, rows]) => (
-          <div key={category} style={{ marginBottom: 20 }}>
-            <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-overline)", color: "var(--text-tertiary)", margin: "0 0 8px" }}>
-              {category}
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {rows.map((service) => (
-                <div
-                  key={service.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 16,
-                    flexWrap: "wrap",
-                    padding: "12px 18px",
-                    background: "var(--surface-card)",
-                    border: "1px solid var(--border-subtle)",
-                    borderRadius: "var(--radius-lg)",
-                    opacity: service.is_active ? 1 : 0.55,
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>{service.name}</p>
-                    <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--text-tertiary)" }}>
-                      {service.duration_minutes} min · SAR {service.price}
-                    </p>
+      {/* Composition pass: same fix as Clients -- a service row used to
+          stretch across the full page width with justify-content:space-
+          between, which read as an unnecessarily wide, sparse bar whenever
+          a category had few items. Capping the grouped list at a narrower
+          content width keeps it dense regardless of category size. */}
+      {!failed && !isLoading && services.length > 0 && (
+        <div style={{ maxWidth: 760 }}>
+          {Object.entries(grouped).map(([category, rows]) => (
+            <div key={category} style={{ marginBottom: 20 }}>
+              <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-overline)", color: "var(--text-tertiary)", margin: "0 0 8px" }}>
+                {category}
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {rows.map((service) => (
+                  <div
+                    key={service.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 14,
+                      padding: "12px 16px",
+                      background: "var(--surface-card)",
+                      border: "1px solid var(--border-subtle)",
+                      borderRadius: "var(--radius-lg)",
+                      opacity: service.is_active ? 1 : 0.55,
+                    }}
+                  >
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{service.name}</p>
+                      <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--text-tertiary)" }}>
+                        {service.duration_minutes} min · SAR {service.price}
+                      </p>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+                      <Switch checked={service.is_active} onChange={() => toggleActive(service)} label="Active" />
+                      <Button variant="secondary" size="sm" icon={<Pencil size={13} />} onClick={() => openEdit(service)}>Edit</Button>
+                      <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => { setDeleteTarget(service); setDeleteError(""); }}>Delete</Button>
+                    </div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
-                    <Switch checked={service.is_active} onChange={() => toggleActive(service)} label="Active" />
-                    <Button variant="secondary" size="sm" icon={<Pencil size={13} />} onClick={() => openEdit(service)}>Edit</Button>
-                    <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => { setDeleteTarget(service); setDeleteError(""); }}>Delete</Button>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
+      )}
 
       <Dialog
         open={formOpen}

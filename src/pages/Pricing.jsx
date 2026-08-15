@@ -1,4 +1,5 @@
-import { Check } from "lucide-react";
+import { Check, ArrowLeft } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button, Badge } from "../components/ui";
 import { useSession } from "../hooks/useSession";
 import { useCurrentWorkspace } from "../hooks/useCurrentWorkspace";
@@ -7,7 +8,19 @@ import { isTrial, getRemainingTrialDays } from "../services/subscription";
 import { PLANS, PLAN_ORDER } from "../lib/plans";
 import "../styles/beautyroute/styles.css";
 
+// Composition pass: Pricing intentionally stays on the LIGHT default
+// beautyroute-ds theme, not the dark authenticated shell -- the design
+// reference's own marketing/plan surfaces render light (no
+// data-theme="dark"), the same convention already used for Login/Signup.
+// Forcing it dark would actually contradict the reference, not match it.
+// The real problem was that it had NO navigational chrome at all: someone
+// clicking "View plans" from deep in the dark app landed on a page with no
+// way back and no visual link to where they came from -- an abrupt dead
+// end, not just a color change. Fixed with a slim top bar (wordmark + a
+// real way back for a signed-in user), not a theme change. Every
+// plan/feature/current-plan/CTA-disabled value below is unchanged.
 export default function Pricing() {
+  const navigate = useNavigate();
   const { user } = useSession();
   const { workspaceId } = useCurrentWorkspace();
   const { subscription } = useSubscription(user ? workspaceId : null);
@@ -19,14 +32,23 @@ export default function Pricing() {
         minHeight: "100vh",
         background: "var(--bg-page)",
         fontFamily: "var(--font-body)",
-        padding: "var(--space-16) var(--space-6)",
       }}
     >
-      <div style={{ maxWidth: 960, margin: "0 auto" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px var(--space-6)", borderBottom: "1px solid var(--border-subtle)" }}>
+        <div style={{ fontFamily: "var(--font-display)", fontSize: 18, color: "var(--text-primary)" }}>
+          Beauty<span style={{ color: "var(--accent-gold)" }}>Route</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate(user ? "/dashboard" : "/login")}
+          style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 13, color: "var(--text-secondary)", fontFamily: "var(--font-body)" }}
+        >
+          <ArrowLeft size={14} /> {user ? "Back to dashboard" : "Sign in"}
+        </button>
+      </div>
+
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: "var(--space-16) var(--space-6)" }}>
         <div style={{ textAlign: "center", marginBottom: 48 }}>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: 22, color: "var(--text-primary)", marginBottom: 20 }}>
-            Beauty<span style={{ color: "var(--accent-gold)" }}>Route</span>
-          </div>
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-display-md)", color: "var(--text-primary)", margin: "0 0 12px" }}>
             Plans for every stage of your business
           </h1>

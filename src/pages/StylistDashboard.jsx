@@ -8,6 +8,7 @@ import { getTodaysAppointments } from "../services/appointments";
 import { getClients } from "../services/clients";
 import { getMonthlyRevenue } from "../services/revenue";
 import { toAppointmentViewModel } from "../lib/appointmentView";
+import { resolveWorkspaceLang } from "../lib/locale";
 import { Skeleton, EmptyState, Input } from "../components/ui";
 import { ErrorState } from "../components/ErrorState";
 import "../styles/beautyroute/styles.css";
@@ -103,7 +104,8 @@ export default function StylistDashboard() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const { profile } = useSession();
-  const { workspaceId, loading: workspaceLoading, error: workspaceError, refresh: refreshWorkspace } = useCurrentWorkspace();
+  const { workspace, workspaceId, loading: workspaceLoading, error: workspaceError, refresh: refreshWorkspace } = useCurrentWorkspace();
+  const lang = resolveWorkspaceLang(workspace);
 
   const [appointments, setAppointments] = useState([]);
   const [clients, setClients] = useState([]);
@@ -189,7 +191,7 @@ export default function StylistDashboard() {
       <Input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search clients…  ابحث"
+        placeholder={lang === "ar" ? "ابحث عن عميلة…" : "Search clients…"}
         icon={<Search size={15} color="var(--text-tertiary)" />}
       />
       {query && (

@@ -28,19 +28,26 @@ export function TrialBanner() {
   const warning = expired || isTrialEndingSoon(subscription);
   const days = getRemainingTrialDays(subscription);
 
+  // Design-refinement pass: this used to re-declare className="beautyroute-ds"
+  // on its own root. TrialBanner only ever renders inside Layout, which
+  // already establishes .beautyroute-ds[data-theme="dark"] one level up --
+  // re-declaring the bare class here (without data-theme="dark" on this same
+  // element) matched the *light* .beautyroute-ds rule instead and silently
+  // reset every inherited dark token back to light, which is exactly why the
+  // banner looked visually disconnected from the rest of the dark shell.
+  // Same bug, same fix shape as Sidebar.jsx and ErrorState.jsx.
   return (
     <div
-      className="beautyroute-ds"
       style={{
         display: "flex",
         alignItems: "center",
-        justifyContent: "space-between",
-        gap: 16,
-        padding: "12px 20px",
+        justifyContent: "center",
+        gap: 14,
+        padding: "10px 20px",
         fontFamily: "var(--font-body)",
         fontSize: 13,
         color: warning ? "var(--error-fg)" : "var(--text-secondary)",
-        background: warning ? "var(--error-bg)" : "var(--bg-sunken)",
+        background: warning ? "var(--error-bg)" : "var(--surface-card-alt)",
         borderBottom: "1px solid var(--border-subtle)",
       }}
     >
@@ -61,6 +68,7 @@ export function TrialBanner() {
           color: "var(--accent-gold-strong)",
           cursor: "pointer",
           textDecoration: "underline",
+          textUnderlineOffset: 2,
         }}
       >
         {expired ? "Upgrade Now" : "View plans"}

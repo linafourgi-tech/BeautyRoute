@@ -15,23 +15,33 @@ import {
   Menu,
   X,
   LogOut,
+  Languages,
 } from "lucide-react";
 import { useSession } from "../hooks/useSession";
 import { useWorkspaceContext } from "../contexts/useWorkspaceContext";
 import { signOutUser } from "../services/auth";
+import { updateWorkspace } from "../services/workspaces";
+import { resolveWorkspaceLang } from "../lib/locale";
 import "../styles/beautyroute/styles.css";
 
 // Design migration (Phase 2, design-system-dashboard-shell): reworked onto
-// the Claude Design "Professional Dashboard" reference (dark, compact,
-// OLED-friendly surface hierarchy -- the same token system as Phase 1,
-// just opted into its already-authored [data-theme="dark"] variant via
-// Layout.jsx, not a new palette). Every route, label, bilingual string,
-// and active-state rule is unchanged from Phase 1; only density/proportions
-// changed to match the reference's 240px-rail, single-tight-row nav items.
+// the approved design reference's "Professional Dashboard" pattern (dark,
+// compact, OLED-friendly surface hierarchy -- the same token system as
+// Phase 1, just opted into its already-authored [data-theme="dark"]
+// variant via Layout.jsx, not a new palette). Every route and bilingual
+// string is unchanged from Phase 1; only density/proportions changed to
+// match the reference's 240px-rail, single-tight-row nav items.
 // Two additions explicitly authorized for this pass: a mobile slide-over
 // drawer (the reference's own mobile.html uses a bottom tab bar, adapted
 // here to a full drawer instead -- see the final report for why) and a
 // Log out action wired directly to the existing signOutUser() service.
+//
+// Label renamed "AI Studio" -> "AI Assistant" (design-refinement pass):
+// "AI Assistant" is the term used everywhere else in the product --
+// AIEngine.jsx's own page title, the ai-assistant Edge Function, the
+// roadmap, test strategy, and security review docs. "AI Studio" only ever
+// existed here; this aligns the nav with the name already established
+// across the rest of the codebase, not a new name invented for this pass.
 const nav = [
   // Was "/" (the Platform Service Hub / ServiceSelection page) -- that
   // page has nothing to do with the dashboard, so "Dashboard" never
@@ -44,10 +54,17 @@ const nav = [
   { to: "/passport", label: "Beauty Passport", labelAr: "جواز الجمال", icon: BookHeart, starred: true },
   { to: "/route", label: "Route", labelAr: "المسار", icon: Map },
   { to: "/business", label: "Business", labelAr: "الأعمال", icon: LineChart },
-  { to: "/ai", label: "AI Studio", labelAr: "الذكاء الاصطناعي", icon: Sparkles },
+  { to: "/ai", label: "AI Assistant", labelAr: "المساعد الذكي", icon: Sparkles },
   { to: "/salon", label: "Salon", labelAr: "الصالون", icon: Store },
   { to: "/pricing", label: "Pricing", labelAr: "الأسعار", icon: Tag },
 ];
+
+// Which language a nav item's label displays -- see lib/locale.js. Until
+// now nothing ever read workspaces.locale, so Sidebar showed both the
+// English and Arabic label on every item unconditionally. That's the bug
+// being fixed here -- not by inventing a new language system, but by
+// finally consuming the column that already exists. Both label strings
+// stay in the `nav` array (nothing is deleted).
 
 function Wordmark() {
   return (
@@ -107,6 +124,67 @@ function WorkspaceSwitcher() {
   );
 }
 
+// The actual control for the locale column NavList reads (see
+// resolveWorkspaceLang in lib/locale.js). Without this, workspace.locale
+// could only ever be set directly in the database -- the bilingual-nav fix
+// would have been half-done, correct in display logic but with no real way
+// for anyone to ever change it. updateWorkspace() already allowlists
+// 'locale' (see services/workspaces.ts); this is the first UI caller of
+// that existing path, not a new mutation capability.
+function LanguageToggle() {
+  const { workspace, workspaceId, refresh } = useWorkspaceContext();
+  const [switching, setSwitching] = useState(false);
+  const [switchError, setSwitchError] = useState("");
+
+  if (!workspaceId) return null;
+  const lang = resolveWorkspaceLang(workspace);
+  const other = lang === "ar" ? "en" : "ar";
+  const otherLabel = other === "ar" ? "العربية" : "English";
+
+  async function handleSwitch() {
+    setSwitching(true);
+    setSwitchError("");
+    try {
+      await updateWorkspace(workspaceId, { locale: other });
+      await refresh();
+    } catch (err) {
+      setSwitchError(err.message || "Couldn't switch language.");
+    } finally {
+      setSwitching(false);
+    }
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={handleSwitch}
+        disabled={switching}
+        aria-label={`Switch to ${otherLabel}`}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          width: "100%",
+          borderRadius: "var(--radius-md)",
+          border: "1px solid var(--border-subtle)",
+          background: "transparent",
+          padding: "9px 12px",
+          fontSize: "var(--text-caption)",
+          color: "var(--text-secondary)",
+          cursor: switching ? "not-allowed" : "pointer",
+          opacity: switching ? 0.6 : 1,
+          fontFamily: "var(--font-body)",
+        }}
+      >
+        <Languages size={14} style={{ flexShrink: 0 }} />
+        <span style={{ flex: 1, textAlign: "left" }}>{switching ? "Switching…" : otherLabel}</span>
+      </button>
+      {switchError && <p role="alert" style={{ margin: "4px 0 0", fontSize: 11, color: "var(--error-fg)" }}>{switchError}</p>}
+    </div>
+  );
+}
+
 function AccountFooter() {
   const navigate = useNavigate();
   const { profile } = useSession();
@@ -156,8 +234,11 @@ function AccountFooter() {
 }
 
 function NavList({ onNavigate }) {
+  const { workspace } = useWorkspaceContext();
+  const lang = resolveWorkspaceLang(workspace);
+
   return (
-    <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" }}>
+    <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" }} dir={lang === "ar" ? "rtl" : "ltr"}>
       {nav.map(({ to, label, labelAr, icon: Icon, starred }) => (
         <NavLink
           key={to}
@@ -178,9 +259,8 @@ function NavList({ onNavigate }) {
           {({ isActive }) => (
             <>
               <Icon size={17} strokeWidth={1.6} color={isActive ? "var(--accent-gold-strong)" : "currentColor"} style={{ flexShrink: 0 }} />
-              <span style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "baseline", gap: 6 }}>
-                <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 500, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
-                <span style={{ fontSize: 10, lineHeight: 1.2, color: "var(--text-tertiary)", flexShrink: 0 }}>{labelAr}</span>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: isActive ? 600 : 500, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {lang === "ar" ? labelAr : label}
               </span>
               {starred && <span style={{ fontSize: 11, color: "var(--accent-gold-strong)", flexShrink: 0 }}>★</span>}
             </>
@@ -198,6 +278,7 @@ function SidebarPanel({ onNavigate }) {
         <Wordmark />
       </div>
       <WorkspaceSwitcher />
+      <LanguageToggle />
       <NavList onNavigate={onNavigate} />
       <AccountFooter />
     </div>

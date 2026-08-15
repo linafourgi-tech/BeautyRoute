@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, waitFor } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
 
@@ -13,10 +13,12 @@ import userEvent from "@testing-library/user-event";
 const useSessionMock = vi.fn();
 const useWorkspaceContextMock = vi.fn();
 const signOutUserMock = vi.fn();
+const updateWorkspaceMock = vi.fn();
 
 vi.mock("../hooks/useSession", () => ({ useSession: () => useSessionMock() }));
 vi.mock("../contexts/useWorkspaceContext", () => ({ useWorkspaceContext: () => useWorkspaceContextMock() }));
 vi.mock("../services/auth", () => ({ signOutUser: (...args) => signOutUserMock(...args) }));
+vi.mock("../services/workspaces", () => ({ updateWorkspace: (...args) => updateWorkspaceMock(...args) }));
 
 import Sidebar from "./Sidebar";
 
@@ -28,7 +30,7 @@ const EXPECTED_ROUTES = [
   ["Beauty Passport", "/passport"],
   ["Route", "/route"],
   ["Business", "/business"],
-  ["AI Studio", "/ai"],
+  ["AI Assistant", "/ai"],
   ["Salon", "/salon"],
   ["Pricing", "/pricing"],
 ];
@@ -50,12 +52,15 @@ describe("Sidebar", () => {
     useWorkspaceContextMock.mockReset();
     signOutUserMock.mockReset();
     signOutUserMock.mockResolvedValue(undefined);
+    updateWorkspaceMock.mockReset();
+    updateWorkspaceMock.mockResolvedValue({ id: "ws-1", name: "Sara's Studio", locale: "ar" });
     useSessionMock.mockReturnValue({ profile: { full_name: "Sara Al-Otaibi" } });
     useWorkspaceContextMock.mockReturnValue({
       workspaces: [{ id: "ws-1", name: "Sara's Studio" }],
       workspace: { id: "ws-1", name: "Sara's Studio" },
       workspaceId: "ws-1",
       selectWorkspace: vi.fn(),
+      refresh: vi.fn(),
       loading: false,
       error: null,
     });
@@ -68,12 +73,85 @@ describe("Sidebar", () => {
     }
   });
 
-  it("preserves the bilingual label for every nav item", () => {
+  // Design-refinement pass: nav items used to show BOTH languages on every
+  // row at once (a real bug -- "Clients العملاء"), regardless of any user
+  // preference. It now shows exactly one, driven by the workspace's
+  // existing `locale` column, with the other language's string still
+  // present in the `nav` data (see Sidebar.jsx) for a future real switcher.
+  it("shows only the English label when the workspace has no locale set (default)", () => {
     renderSidebar();
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
-    expect(screen.getByText("الرئيسية")).toBeInTheDocument();
     expect(screen.getByText("Beauty Passport")).toBeInTheDocument();
+    expect(screen.queryByText("الرئيسية")).not.toBeInTheDocument();
+    expect(screen.queryByText("جواز الجمال")).not.toBeInTheDocument();
+  });
+
+  it("shows only the Arabic label when the workspace's locale is 'ar'", () => {
+    useWorkspaceContextMock.mockReturnValue({
+      workspaces: [{ id: "ws-1", name: "Sara's Studio", locale: "ar" }],
+      workspace: { id: "ws-1", name: "Sara's Studio", locale: "ar" },
+      workspaceId: "ws-1",
+      selectWorkspace: vi.fn(),
+      refresh: vi.fn(),
+      loading: false,
+      error: null,
+    });
+    renderSidebar();
+    expect(screen.getByText("الرئيسية")).toBeInTheDocument();
     expect(screen.getByText("جواز الجمال")).toBeInTheDocument();
+    expect(screen.queryByText("Dashboard")).not.toBeInTheDocument();
+    expect(screen.queryByText("Beauty Passport")).not.toBeInTheDocument();
+  });
+
+  describe("language toggle", () => {
+    it("offers to switch to Arabic when the workspace has no locale set", () => {
+      renderSidebar();
+      expect(screen.getByRole("button", { name: /العربية/ })).toBeInTheDocument();
+    });
+
+    it("offers to switch to English when the workspace's locale is 'ar'", () => {
+      useWorkspaceContextMock.mockReturnValue({
+        workspaces: [{ id: "ws-1", name: "Sara's Studio", locale: "ar" }],
+        workspace: { id: "ws-1", name: "Sara's Studio", locale: "ar" },
+        workspaceId: "ws-1",
+        selectWorkspace: vi.fn(),
+        refresh: vi.fn(),
+        loading: false,
+        error: null,
+      });
+      renderSidebar();
+      expect(screen.getByRole("button", { name: /English/ })).toBeInTheDocument();
+    });
+
+    it("calls the real updateWorkspace() with the new locale and refreshes when clicked", async () => {
+      const refresh = vi.fn();
+      useWorkspaceContextMock.mockReturnValue({
+        workspaces: [{ id: "ws-1", name: "Sara's Studio" }],
+        workspace: { id: "ws-1", name: "Sara's Studio" },
+        workspaceId: "ws-1",
+        selectWorkspace: vi.fn(),
+        refresh,
+        loading: false,
+        error: null,
+      });
+      const user = userEvent.setup();
+      renderSidebar();
+
+      await user.click(screen.getByRole("button", { name: /العربية/ }));
+
+      expect(updateWorkspaceMock).toHaveBeenCalledWith("ws-1", { locale: "ar" });
+      await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    });
+
+    it("shows an error and does not crash when the switch fails", async () => {
+      updateWorkspaceMock.mockRejectedValue(new Error("Network error"));
+      const user = userEvent.setup();
+      renderSidebar();
+
+      await user.click(screen.getByRole("button", { name: /العربية/ }));
+
+      expect(await screen.findByText("Network error")).toBeInTheDocument();
+    });
   });
 
   it("marks the current route's link as active (aria-current), and only that one", () => {
