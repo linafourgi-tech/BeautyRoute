@@ -118,6 +118,12 @@ export default function BusinessEngine() {
 
   const totalRevenue = chartData.reduce((s, m) => s + m.revenue, 0);
   const totalExpenses = chartData.reduce((s, m) => s + m.expenses, 0);
+  // A brand-new workspace has 6 real months of zero-value points, not zero
+  // points -- recharts renders that as a full-height flat line at the axis,
+  // which reads as a broken/empty chart rather than "no data yet." Detect
+  // that specific real case and show an actual empty state instead of a
+  // chart with nothing meaningful to look at.
+  const hasChartActivity = totalRevenue > 0 || totalExpenses > 0;
 
   // Deliberately labeled "longest-standing," not "most loyal" -- this is
   // ranked purely by earliest created_at (tenure), which is the only
@@ -158,9 +164,14 @@ export default function BusinessEngine() {
 
           <div style={{ borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", padding: "var(--space-6)", marginBottom: "var(--space-6)" }}>
             <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h3)", color: "var(--text-primary)", margin: "0 0 var(--space-4)" }}>Revenue vs expenses</h2>
-            {isLoading ? (
-              <Skeleton height={260} radius="var(--radius-lg)" />
-            ) : (
+            {isLoading && <Skeleton height={260} radius="var(--radius-lg)" />}
+            {!isLoading && !hasChartActivity && (
+              <EmptyState
+                title="No revenue or expenses yet"
+                description="Once you log completed appointments and expenses, the last 6 months will chart here."
+              />
+            )}
+            {!isLoading && hasChartActivity && (
               <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={chartData}>
                   <defs>

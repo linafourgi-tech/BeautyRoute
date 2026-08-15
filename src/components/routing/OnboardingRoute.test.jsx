@@ -34,7 +34,7 @@ describe("OnboardingRoute", () => {
   it("shows the loading screen while the session is resolving", () => {
     useSessionMock.mockReturnValue({ user: null, profile: null, loading: true });
     renderGuarded();
-    expect(screen.getByText("Loading…")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Loading" })).toBeInTheDocument();
   });
 
   it("redirects to /login when signed out", () => {

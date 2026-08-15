@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MapPin, Clock, Navigation, AlertTriangle, ArrowUp, ArrowDown, RotateCcw, Sparkles } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { MapPin, Clock, Navigation, AlertTriangle, ArrowUp, ArrowDown, RotateCcw, Sparkles, Lock } from "lucide-react";
 import Layout from "../components/Layout";
 import RouteMap from "../components/RouteMap";
 import { useCurrentWorkspace } from "../hooks/useCurrentWorkspace";
@@ -57,6 +58,7 @@ function buildNavigationUrl(order, stopsById, start, end) {
 }
 
 export default function RouteEngine() {
+  const navigate = useNavigate();
   const { workspace, workspaceId, loading: workspaceLoading, error: workspaceError, refresh: refreshWorkspace } = useCurrentWorkspace();
   const { subscription, loading: subLoading } = useSubscription(workspaceId);
 
@@ -184,11 +186,18 @@ export default function RouteEngine() {
     <Layout title="Route Engine" titleAr="المسار" subtitle="Plan today's stops, see estimated travel time, and open the route in your navigation app.">
       {isLoading && <p style={{ color: "var(--text-tertiary)", fontSize: 14 }}>Loading…</p>}
 
+      {/* Same locked-state pattern as AIEngine.jsx's gated block: a real
+          upgrade path (not just descriptive text) via the existing
+          /pricing route. hasFeature()/entitlement logic is unchanged --
+          presentation only. */}
       {gated && (
-        <div style={{ borderRadius: "var(--radius-xl)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", padding: "var(--space-10)", textAlign: "center" }}>
-          <Navigation size={22} color="var(--accent-gold-strong)" style={{ margin: "0 auto 12px" }} />
+        <div style={{ borderRadius: "var(--radius-xl)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", padding: "var(--space-8) var(--space-6)", textAlign: "center" }}>
+          <span style={{ height: 44, width: 44, borderRadius: "50%", background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+            <Lock size={18} color="var(--accent-gold-strong)" />
+          </span>
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h2)", color: "var(--text-primary)", margin: "0 0 8px" }}>Route Engine is a Professional feature</h2>
-          <p style={{ color: "var(--text-tertiary)", fontSize: 14, maxWidth: 420, margin: "0 auto" }}>Upgrade your plan to optimize daily routes between client appointments.</p>
+          <p style={{ color: "var(--text-tertiary)", fontSize: 14, maxWidth: 420, margin: "0 auto 20px" }}>Optimize today's stop order automatically and open the shortest path between appointments in your navigation app.</p>
+          <Button variant="gold" onClick={() => navigate("/pricing")}>View plans</Button>
         </div>
       )}
 

@@ -11,6 +11,12 @@ import "../styles/beautyroute/styles.css";
 const TIERS = ["Bronze", "Silver", "Gold", "Platinum"];
 const EMPTY_FORM = { full_name: "", phone: "", email: "", tier: "Bronze", internal_notes: "" };
 
+function initials(fullName) {
+  const parts = (fullName || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  return parts.slice(0, 2).map((p) => p[0]).join("").toUpperCase();
+}
+
 // Postgres foreign-key-violation SQLSTATE -- thrown when deleting a client
 // who has appointment/visit history (clients has no archive column, so a
 // blocked delete is the schema's real, existing behavior, not a bug to hide).
@@ -183,7 +189,7 @@ export default function Clients() {
       {failed && <ErrorState message={typeof failed === "string" ? failed : failed.message} onRetry={retry} />}
 
       {!failed && isLoading && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 760 }}>
           <Skeleton height={56} radius="var(--radius-lg)" />
           <Skeleton height={56} radius="var(--radius-lg)" />
           <Skeleton height={56} radius="var(--radius-lg)" />
@@ -198,30 +204,56 @@ export default function Clients() {
         />
       )}
 
+      {/* Composition pass: a client row used to stretch across the full
+          max-w-6xl (1152px) content column with justify-content:space-between
+          -- with few clients that read as one very wide, sparse bar (name on
+          the far left, actions stranded far to the right) rather than a
+          dense list. Capping the list itself at a narrower content width
+          (matching the reference's list patterns, which never run list rows
+          edge-to-edge across the full dashboard width) and adding an
+          initials avatar to give the left side real visual weight fixes
+          both complaints without touching any client data or behavior. */}
       {!failed && !isLoading && filtered.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: 760 }}>
           {filtered.map((client) => (
             <div
               key={client.id}
               style={{
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "space-between",
-                gap: 16,
-                flexWrap: "wrap",
-                padding: "13px 18px",
+                gap: 14,
+                padding: "12px 16px",
                 background: "var(--surface-card)",
                 border: "1px solid var(--border-subtle)",
                 borderRadius: "var(--radius-lg)",
               }}
             >
-              <div style={{ minWidth: 0 }}>
-                <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>{client.full_name}</p>
-                <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--text-tertiary)" }}>
+              <div
+                aria-hidden="true"
+                style={{
+                  flexShrink: 0,
+                  width: 36,
+                  height: 36,
+                  borderRadius: "var(--radius-pill)",
+                  background: "var(--bg-sunken)",
+                  border: "1px solid var(--border-subtle)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontFamily: "var(--font-display)",
+                  fontSize: 13,
+                  color: "var(--accent-gold-strong)",
+                }}
+              >
+                {initials(client.full_name)}
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{client.full_name}</p>
+                <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {[client.phone, client.email].filter(Boolean).join(" · ") || "No contact info on file"} · {client.tier}
                 </p>
               </div>
-              <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                 <Button variant="secondary" size="sm" icon={<BookHeart size={13} />} onClick={() => navigate(`/passport?client=${client.id}`)}>Passport</Button>
                 <Button variant="secondary" size="sm" icon={<Pencil size={13} />} onClick={() => openEdit(client)}>Edit</Button>
                 <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => { setDeleteTarget(client); setDeleteError(""); }}>Delete</Button>

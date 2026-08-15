@@ -1,11 +1,13 @@
 import { useRef, useState, useEffect } from "react";
-import { Sparkles, Send, ShieldAlert } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Sparkles, Send, ShieldAlert, Lock } from "lucide-react";
 import Layout from "../components/Layout";
 import { useCurrentWorkspace } from "../hooks/useCurrentWorkspace";
 import { useSubscription } from "../hooks/useSubscription";
 import { hasFeature } from "../services/subscription";
 import { FeatureGate } from "../components/subscription/FeatureGate";
 import { sendAssistantMessage, AiUnavailableError } from "../services/ai";
+import { Button } from "../components/ui";
 
 // Design migration (full-product-design-migration): fully re-skinned onto
 // beautyroute-ds. Every data hook, effect, and piece of state below is
@@ -20,6 +22,7 @@ const EXAMPLE_QUESTIONS = [
 ];
 
 export default function AIEngine() {
+  const navigate = useNavigate();
   const { workspace, workspaceId, loading: workspaceLoading } = useCurrentWorkspace();
   const { subscription, loading: subLoading } = useSubscription(workspaceId);
 
@@ -58,13 +61,35 @@ export default function AIEngine() {
     <Layout title="AI Assistant" titleAr="الذكاء الاصطناعي" subtitle="Ask about your workspace — appointments, clients, and services. Grounded in your real data, never invented.">
       {isLoading && <p style={{ color: "var(--text-tertiary)", fontSize: 14 }}>Loading…</p>}
 
+      {/* Composition pass: this was previously just descriptive text with no
+          actual path forward -- an "upgrade wall" in the least useful sense.
+          It now explains what the feature actually does (reusing the real
+          EXAMPLE_QUESTIONS list, not invented copy) and gives a real CTA to
+          /pricing, matching TrialBanner's existing "View plans" pattern.
+          hasFeature()/FeatureGate gating logic is untouched -- this is
+          presentation only. */}
       {gated && (
-        <div style={{ borderRadius: "var(--radius-xl)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", padding: "var(--space-10)", textAlign: "center" }}>
-          <Sparkles size={22} color="var(--accent-gold-strong)" style={{ margin: "0 auto 12px" }} />
-          <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h2)", color: "var(--text-primary)", margin: "0 0 8px" }}>AI Assistant is a Professional feature</h2>
-          <p style={{ color: "var(--text-tertiary)", fontSize: 14, maxWidth: 420, margin: "0 auto" }}>
-            Upgrade your plan to ask the AI assistant about your appointments, clients, and services.
-          </p>
+        <div style={{ borderRadius: "var(--radius-xl)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", padding: "var(--space-8) var(--space-6)" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", maxWidth: 460, margin: "0 auto" }}>
+            <span style={{ height: 44, width: 44, borderRadius: "50%", background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
+              <Lock size={18} color="var(--accent-gold-strong)" />
+            </span>
+            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h2)", color: "var(--text-primary)", margin: "0 0 8px" }}>AI Assistant is a Professional feature</h2>
+            <p style={{ color: "var(--text-tertiary)", fontSize: 14, margin: "0 0 20px" }}>
+              Ask natural-language questions about your own workspace data — appointments, clients, and services — and get grounded answers, never invented ones.
+            </p>
+            <Button variant="gold" onClick={() => navigate("/pricing")}>View plans</Button>
+          </div>
+
+          <div style={{ borderTop: "1px solid var(--border-subtle)", marginTop: 28, paddingTop: 20, display: "grid", gap: 8, maxWidth: 420, marginLeft: "auto", marginRight: "auto" }}>
+            <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-overline)", color: "var(--text-tertiary)", margin: "0 0 4px", textAlign: "center" }}>What you'll be able to ask</p>
+            {EXAMPLE_QUESTIONS.slice(0, 3).map((q) => (
+              <div key={q} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "var(--text-secondary)" }}>
+                <Sparkles size={13} color="var(--accent-gold-strong)" style={{ flexShrink: 0 }} />
+                {q}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
