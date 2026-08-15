@@ -26,9 +26,17 @@ export default function RouteMap({ stops, start, end, geometry, conflictIds }) {
       const mapboxgl = mod.default;
       mapboxglRef.current = mapboxgl;
       mapboxgl.accessToken = PUBLIC_TOKEN;
+      // Pure presentation change (full-product-design-migration composition
+      // pass): dark-v11 is Mapbox's own official, existing hosted style --
+      // not a custom style, nothing invented. Same accessToken/geocoding/
+      // matrix/directions plumbing either way; only which base-tile style
+      // the map requests. light-v11 read as a bright rectangle punched into
+      // an otherwise dark authenticated shell -- dark-v11 keeps the map a
+      // coherent part of the same product instead of visually conflicting
+      // with it.
       const map = new mapboxgl.Map({
         container: containerRef.current,
-        style: "mapbox://styles/mapbox/light-v11",
+        style: "mapbox://styles/mapbox/dark-v11",
         center: [46.6753, 24.7136],
         zoom: 10,
       });
@@ -59,7 +67,10 @@ export default function RouteMap({ stops, start, end, geometry, conflictIds }) {
     const points = [];
 
     if (start) {
-      const el = markerEl("S", "#3C2F23");
+      // Light ivory fill for contrast against the dark-v11 basemap --
+      // dark text on top of it for the same reason white-on-white would
+      // fail on the gold/error pins below.
+      const el = markerEl("S", "#FAF7F2", "#1F1B18");
       markersRef.current.push(new mapboxgl.Marker({ element: el }).setLngLat([start.lng, start.lat]).addTo(map));
       points.push([start.lng, start.lat]);
     }
@@ -76,7 +87,7 @@ export default function RouteMap({ stops, start, end, geometry, conflictIds }) {
     });
 
     if (end) {
-      const el = markerEl("E", "#3C2F23");
+      const el = markerEl("E", "#FAF7F2", "#1F1B18");
       markersRef.current.push(new mapboxgl.Marker({ element: el }).setLngLat([end.lng, end.lat]).addTo(map));
       points.push([end.lng, end.lat]);
     }
@@ -120,13 +131,13 @@ export default function RouteMap({ stops, start, end, geometry, conflictIds }) {
   return <div ref={containerRef} className="aspect-[16/10] rounded-xl overflow-hidden" style={{ border: "1px solid var(--border-subtle)" }} />;
 }
 
-function markerEl(label, color) {
+function markerEl(label, color, textColor = "#fff") {
   const el = document.createElement("div");
   el.style.width = "26px";
   el.style.height = "26px";
   el.style.borderRadius = "50%";
   el.style.background = color;
-  el.style.color = "#fff";
+  el.style.color = textColor;
   el.style.display = "flex";
   el.style.alignItems = "center";
   el.style.justifyContent = "center";

@@ -157,20 +157,29 @@ export default function Clients() {
     <Layout
       title="Clients"
       titleAr="العملاء"
-      subtitle="Everyone you've worked with, in one place."
-      headerActions={<Button variant="gold" icon={<Plus size={16} />} onClick={openCreate}>New client</Button>}
-    >
-      {!failed && (
-        <div style={{ marginBottom: 20, maxWidth: 420 }}>
-          <Input
-            icon={<Search size={15} style={{ color: "var(--text-tertiary)" }} />}
-            placeholder="Search by name, phone, or email"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+      subtitle={isLoading ? "Everyone you've worked with, in one place." : `${clients.length} client${clients.length === 1 ? "" : "s"} · everyone you've worked with, in one place.`}
+      headerActions={
+        // Composition pass: search now sits in the header row next to the
+        // primary action (matching StylistDashboard's pattern) instead of
+        // its own full-width block below the header -- that extra block
+        // was exactly the kind of unnecessary vertical space that made
+        // this page feel like a separate, standalone CRUD screen rather
+        // than an operational section of the same product.
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          {!failed && (
+            <div style={{ width: 220 }}>
+              <Input
+                icon={<Search size={15} style={{ color: "var(--text-tertiary)" }} />}
+                placeholder="Search clients…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+          )}
+          <Button variant="gold" icon={<Plus size={16} />} onClick={openCreate}>New client</Button>
         </div>
-      )}
-
+      }
+    >
       {failed && <ErrorState message={typeof failed === "string" ? failed : failed.message} onRetry={retry} />}
 
       {!failed && isLoading && (
@@ -190,7 +199,7 @@ export default function Clients() {
       )}
 
       {!failed && !isLoading && filtered.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {filtered.map((client) => (
             <div
               key={client.id}
@@ -200,7 +209,7 @@ export default function Clients() {
                 justifyContent: "space-between",
                 gap: 16,
                 flexWrap: "wrap",
-                padding: "16px 20px",
+                padding: "13px 18px",
                 background: "var(--surface-card)",
                 border: "1px solid var(--border-subtle)",
                 borderRadius: "var(--radius-lg)",
