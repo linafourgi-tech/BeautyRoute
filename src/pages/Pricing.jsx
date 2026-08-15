@@ -1,4 +1,4 @@
-import { Check, ArrowLeft } from "lucide-react";
+import { Check, ArrowLeft, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button, Badge } from "../components/ui";
 import { useSession } from "../hooks/useSession";
@@ -6,6 +6,8 @@ import { useCurrentWorkspace } from "../hooks/useCurrentWorkspace";
 import { useSubscription } from "../hooks/useSubscription";
 import { isTrial, getRemainingTrialDays } from "../services/subscription";
 import { PLANS, PLAN_ORDER } from "../lib/plans";
+import { resolveWorkspaceLang } from "../lib/locale";
+import { t, dirFor } from "../lib/i18n";
 import "../styles/beautyroute/styles.css";
 
 // Composition pass: Pricing intentionally stays on the LIGHT default
@@ -22,12 +24,19 @@ import "../styles/beautyroute/styles.css";
 export default function Pricing() {
   const navigate = useNavigate();
   const { user } = useSession();
-  const { workspaceId } = useCurrentWorkspace();
+  const { workspace, workspaceId } = useCurrentWorkspace();
   const { subscription } = useSubscription(user ? workspaceId : null);
+  // Falls back to English for a signed-out visitor (no workspace to read a
+  // locale from) or an authenticated user whose workspace hasn't set one --
+  // same default as everywhere else in the app.
+  const lang = resolveWorkspaceLang(workspace);
+  const dir = dirFor(lang);
+  const BackIcon = dir === "rtl" ? ArrowRight : ArrowLeft;
 
   return (
     <div
       className="beautyroute-ds"
+      dir={dir}
       style={{
         minHeight: "100vh",
         background: "var(--bg-page)",
@@ -43,18 +52,24 @@ export default function Pricing() {
           onClick={() => navigate(user ? "/dashboard" : "/login")}
           style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 13, color: "var(--text-secondary)", fontFamily: "var(--font-body)" }}
         >
-          <ArrowLeft size={14} /> {user ? "Back to dashboard" : "Sign in"}
+          {/* "Back" is directional, not decorative -- it points toward the
+              reading-order start, so it mirrors under RTL (ArrowRight)
+              instead of staying a literal left arrow. Menu/close/chevron
+              icons elsewhere in the app are left unmirrored deliberately;
+              this is the one icon in this pass with real semantic
+              direction. */}
+          <BackIcon size={14} /> {user ? t("pricing.backToDashboard", lang) : t("pricing.signIn", lang)}
         </button>
       </div>
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "var(--space-16) var(--space-6)" }}>
         <div style={{ textAlign: "center", marginBottom: 48 }}>
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-display-md)", color: "var(--text-primary)", margin: "0 0 12px" }}>
-            Plans for every stage of your business
+            {t("pricing.heading", lang)}
           </h1>
           {subscription && isTrial(subscription) && (
             <p style={{ fontSize: 14, color: "var(--text-tertiary)", margin: 0 }}>
-              You're on a free trial — {getRemainingTrialDays(subscription)} day{getRemainingTrialDays(subscription) === 1 ? "" : "s"} left.
+              {t("pricing.onTrial", lang, { days: getRemainingTrialDays(subscription) })}
             </p>
           )}
         </div>
@@ -82,7 +97,7 @@ export default function Pricing() {
                     <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h2)", color: "var(--text-primary)", margin: 0 }}>
                       {plan.displayName}
                     </h2>
-                    {isCurrent && <Badge tone="gold">Current plan</Badge>}
+                    {isCurrent && <Badge tone="gold">{t("pricing.currentPlan", lang)}</Badge>}
                   </div>
                   <p style={{ fontSize: 13, color: "var(--text-tertiary)", margin: "0 0 12px" }}>{plan.tagline}</p>
                   <p style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h3)", color: "var(--text-primary)", margin: 0 }}>
@@ -104,13 +119,13 @@ export default function Pricing() {
                       }}
                     >
                       <Check size={14} style={{ color: enabled ? "var(--success-fg)" : "var(--text-tertiary)", flexShrink: 0 }} />
-                      {featureLabel(feature)}
+                      {t(`pricing.feature.${feature}`, lang)}
                     </li>
                   ))}
                 </ul>
 
                 <Button variant={isCurrent ? "secondary" : "gold"} disabled>
-                  Coming Soon
+                  {t("pricing.comingSoon", lang)}
                 </Button>
               </div>
             );
@@ -119,15 +134,4 @@ export default function Pricing() {
       </div>
     </div>
   );
-}
-
-function featureLabel(key) {
-  const labels = {
-    ai: "AI consultation & recommendations",
-    routing: "Smart route optimization",
-    staff: "Staff & team management",
-    analytics: "Business analytics",
-    unlimitedClients: "Unlimited clients",
-  };
-  return labels[key] ?? key;
 }

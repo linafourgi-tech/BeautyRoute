@@ -312,4 +312,21 @@ describe("Appointments page", () => {
     await waitFor(() => expect(deleteAppointmentMock).toHaveBeenCalledWith("a1"));
     expect(await screen.findByText("Nothing booked yet")).toBeInTheDocument();
   });
+
+  // Localization fix (design-refinement pass): the page title/subtitle/
+  // empty-state/primary-action used to be English-only with no Arabic
+  // counterpart at all -- this locks in that switching the workspace's
+  // language actually translates this page's own content, not just the
+  // Sidebar around it.
+  it("renders in Arabic -- title, empty state, and primary action -- when the workspace's locale is 'ar', with no leftover English UI", async () => {
+    useCurrentWorkspaceMock.mockReturnValue({ workspaceId: "ws-1", loading: false, error: null, refresh: vi.fn(), workspace: { id: "ws-1", locale: "ar" } });
+    getAppointmentsMock.mockResolvedValue([]);
+    renderAppointments();
+
+    expect(await screen.findByRole("heading", { name: "محرك المواعيد" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "حجز جديد" })).toBeInTheDocument();
+    expect(screen.getByText("لا توجد حجوزات بعد")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Appointment Engine" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Nothing booked yet")).not.toBeInTheDocument();
+  });
 });

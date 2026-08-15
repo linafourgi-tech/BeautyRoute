@@ -215,4 +215,59 @@ describe("StylistDashboard page", () => {
 
     expect(await screen.findByRole("link", { name: /Full map/ })).toHaveAttribute("href", "/route");
   });
+
+  // Localization fix (design-refinement pass): the Dashboard used to render
+  // in a fixed mix of languages -- "Good to see you" (English) always paired
+  // with "أهلاً بك" (Arabic) regardless of any language selection, while
+  // every OTHER string on the page (stat labels, "Today", "Full map", the
+  // empty state) was English-only with no Arabic version at all. These
+  // tests lock in the real, deterministic contract: exactly one language,
+  // driven by the workspace's locale column, applied to the WHOLE page.
+  describe("localization", () => {
+    it("renders English UI end-to-end, with no Arabic greeting mixed in, when the workspace has no locale set (default)", async () => {
+      getTodaysAppointmentsMock.mockResolvedValue([]);
+      getClientsMock.mockResolvedValue([]);
+      renderDashboard();
+
+      expect(await screen.findByText("Good to see you, Sara")).toBeInTheDocument();
+      expect(screen.getByText("Today")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /Full map/ })).toBeInTheDocument();
+      expect(screen.getByText("No visits scheduled today")).toBeInTheDocument();
+      expect(screen.getByText("Enjoy the quiet — today's bookings will show up here.")).toBeInTheDocument();
+      expect(screen.getByText("appointments today")).toBeInTheDocument();
+      expect(screen.queryByText("أهلاً بك")).not.toBeInTheDocument();
+    });
+
+    it("renders Arabic UI end-to-end, with no leftover English page content, when the workspace's locale is 'ar'", async () => {
+      useCurrentWorkspaceMock.mockReturnValue({ workspaceId: "ws-1", loading: false, error: null, refresh: vi.fn(), workspace: { id: "ws-1", locale: "ar" } });
+      getTodaysAppointmentsMock.mockResolvedValue([]);
+      getClientsMock.mockResolvedValue([]);
+      renderDashboard();
+
+      expect(await screen.findByText("أهلاً بك")).toBeInTheDocument();
+      expect(screen.getByText("اليوم")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /الخريطة الكاملة/ })).toBeInTheDocument();
+      expect(screen.getByText("لا توجد زيارات مجدولة اليوم")).toBeInTheDocument();
+      expect(screen.getByText("استمتعي بالهدوء — ستظهر حجوزات اليوم هنا.")).toBeInTheDocument();
+      expect(screen.getByText("مواعيد اليوم")).toBeInTheDocument();
+      expect(screen.queryByText("Good to see you")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Good to see you,/)).not.toBeInTheDocument();
+      expect(screen.queryByText("Today")).not.toBeInTheDocument();
+      expect(screen.queryByText("No visits scheduled today")).not.toBeInTheDocument();
+      expect(screen.queryByText("appointments today")).not.toBeInTheDocument();
+    });
+
+    it("translates the search placeholder and empty-search message in Arabic mode too, not just the static chrome", async () => {
+      useCurrentWorkspaceMock.mockReturnValue({ workspaceId: "ws-1", loading: false, error: null, refresh: vi.fn(), workspace: { id: "ws-1", locale: "ar" } });
+      getTodaysAppointmentsMock.mockResolvedValue([]);
+      getClientsMock.mockResolvedValue([CLIENT_ROW()]);
+      const user = userEvent.setup();
+      renderDashboard();
+      await waitFor(() => expect(getClientsMock).toHaveBeenCalled());
+
+      const searchInput = screen.getByPlaceholderText("ابحث عن عميلة…");
+      await user.type(searchInput, "zzz-no-match");
+      expect(await screen.findByText('لا توجد عميلة تطابق "zzz-no-match".')).toBeInTheDocument();
+    });
+  });
 });

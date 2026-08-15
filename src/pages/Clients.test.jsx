@@ -206,4 +206,19 @@ describe("Clients page", () => {
     // The client must still be in the list -- the delete did not silently succeed.
     expect(screen.getByText("Amira Al-Fahad")).toBeInTheDocument();
   });
+
+  // Localization fix (design-refinement pass): title/subtitle/search
+  // placeholder/empty state/primary action used to be English-only.
+  it("renders in Arabic -- title, subtitle, empty state, and primary action -- when the workspace's locale is 'ar', with no leftover English UI", async () => {
+    useCurrentWorkspaceMock.mockReturnValue({ workspaceId: "ws-1", loading: false, error: null, refresh: vi.fn(), workspace: { id: "ws-1", locale: "ar" } });
+    getClientsMock.mockResolvedValue([]);
+    renderClients();
+
+    expect(await screen.findByRole("heading", { name: "العملاء" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "عميلة جديدة" })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("ابحث عن عميلة…")).toBeInTheDocument();
+    expect(screen.getByText("لا توجد عميلات بعد")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Clients" })).not.toBeInTheDocument();
+    expect(screen.queryByText("No clients yet")).not.toBeInTheDocument();
+  });
 });

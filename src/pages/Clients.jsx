@@ -6,6 +6,8 @@ import { useCurrentWorkspace } from "../hooks/useCurrentWorkspace";
 import { getClients, createClient, updateClient, deleteClient } from "../services/clients";
 import { Button, Input, Select, Dialog, Skeleton, EmptyState } from "../components/ui";
 import { ErrorState } from "../components/ErrorState";
+import { useAppLang } from "../hooks/useAppLang";
+import { t, translateEnum } from "../lib/i18n";
 import "../styles/beautyroute/styles.css";
 
 const TIERS = ["Bronze", "Silver", "Gold", "Platinum"];
@@ -24,6 +26,7 @@ const FK_VIOLATION = "23503";
 
 export default function Clients() {
   const navigate = useNavigate();
+  const { lang } = useAppLang();
   const { workspaceId, loading: workspaceLoading, error: workspaceError, refresh: refreshWorkspace } = useCurrentWorkspace();
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -59,7 +62,7 @@ export default function Clients() {
         const rows = await getClients(workspaceId);
         if (!cancelled) setClients(rows ?? []);
       } catch (err) {
-        if (!cancelled) setError(err.message || "Couldn't load clients.");
+        if (!cancelled) setError(err.message || t("clients.errorFallback", lang));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -69,6 +72,10 @@ export default function Clients() {
     return () => {
       cancelled = true;
     };
+    // `lang` is deliberately excluded -- see Appointments.jsx's identical
+    // comment for why (fallback error-message translation only, not worth
+    // an extra fetch on a language switch).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId, workspaceLoading, reloadToken]);
 
   function retry() {
@@ -109,7 +116,7 @@ export default function Clients() {
 
   async function handleSave() {
     if (!form.full_name.trim()) {
-      setFormError("Full name is required.");
+      setFormError(t("clients.validation.fullName", lang));
       return;
     }
     setFormError("");
@@ -131,7 +138,7 @@ export default function Clients() {
       }
       setFormOpen(false);
     } catch (err) {
-      setFormError(err.message || "Couldn't save this client.");
+      setFormError(err.message || t("clients.saveErrorFallback", lang));
     } finally {
       setSaving(false);
     }
@@ -147,9 +154,9 @@ export default function Clients() {
       setDeleteTarget(null);
     } catch (err) {
       if (err.code === FK_VIOLATION) {
-        setDeleteError("This client has appointment or visit history and can't be deleted.");
+        setDeleteError(t("clients.deleteBlocked", lang));
       } else {
-        setDeleteError(err.message || "Couldn't delete this client.");
+        setDeleteError(err.message || t("clients.deleteErrorFallback", lang));
       }
     } finally {
       setDeleting(false);
@@ -161,9 +168,8 @@ export default function Clients() {
 
   return (
     <Layout
-      title="Clients"
-      titleAr="العملاء"
-      subtitle={isLoading ? "Everyone you've worked with, in one place." : `${clients.length} client${clients.length === 1 ? "" : "s"} · everyone you've worked with, in one place.`}
+      title={t("clients.title", lang)}
+      subtitle={isLoading ? t("clients.subtitleLoading", lang) : t("clients.subtitle", lang, { count: clients.length })}
       headerActions={
         // Composition pass: search now sits in the header row next to the
         // primary action (matching StylistDashboard's pattern) instead of
@@ -176,13 +182,13 @@ export default function Clients() {
             <div style={{ width: 220 }}>
               <Input
                 icon={<Search size={15} style={{ color: "var(--text-tertiary)" }} />}
-                placeholder="Search clients…"
+                placeholder={t("clients.searchPlaceholder", lang)}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
             </div>
           )}
-          <Button variant="gold" icon={<Plus size={16} />} onClick={openCreate}>New client</Button>
+          <Button variant="gold" icon={<Plus size={16} />} onClick={openCreate}>{t("clients.newClient", lang)}</Button>
         </div>
       }
     >
@@ -198,9 +204,9 @@ export default function Clients() {
 
       {!failed && !isLoading && filtered.length === 0 && (
         <EmptyState
-          title={query ? "No clients match your search" : "No clients yet"}
-          description={query ? "Try a different name, phone, or email." : "Add your first client to get started."}
-          action={!query && <Button variant="gold" onClick={openCreate}>Add a client</Button>}
+          title={query ? t("clients.emptySearchTitle", lang) : t("clients.emptyTitle", lang)}
+          description={query ? t("clients.emptySearchDescription", lang) : t("clients.emptyDescription", lang)}
+          action={!query && <Button variant="gold" onClick={openCreate}>{t("clients.addClient", lang)}</Button>}
         />
       )}
 
@@ -250,13 +256,13 @@ export default function Clients() {
               <div style={{ minWidth: 0, flex: 1 }}>
                 <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{client.full_name}</p>
                 <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {[client.phone, client.email].filter(Boolean).join(" · ") || "No contact info on file"} · {client.tier}
+                  {[client.phone, client.email].filter(Boolean).join(" · ") || t("clients.noContactInfo", lang)} · {translateEnum("tier", client.tier, lang)}
                 </p>
               </div>
               <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                <Button variant="secondary" size="sm" icon={<BookHeart size={13} />} onClick={() => navigate(`/passport?client=${client.id}`)}>Passport</Button>
-                <Button variant="secondary" size="sm" icon={<Pencil size={13} />} onClick={() => openEdit(client)}>Edit</Button>
-                <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => { setDeleteTarget(client); setDeleteError(""); }}>Delete</Button>
+                <Button variant="secondary" size="sm" icon={<BookHeart size={13} />} onClick={() => navigate(`/passport?client=${client.id}`)}>{t("clients.passport", lang)}</Button>
+                <Button variant="secondary" size="sm" icon={<Pencil size={13} />} onClick={() => openEdit(client)}>{t("action.edit", lang)}</Button>
+                <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => { setDeleteTarget(client); setDeleteError(""); }}>{t("action.delete", lang)}</Button>
               </div>
             </div>
           ))}
@@ -266,20 +272,25 @@ export default function Clients() {
       <Dialog
         open={formOpen}
         onClose={() => !saving && setFormOpen(false)}
-        title={editingId ? "Edit client" : "New client"}
+        title={editingId ? t("clients.editClient", lang) : t("clients.newClientTitle", lang)}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setFormOpen(false)} disabled={saving}>Cancel</Button>
-            <Button variant="gold" onClick={handleSave} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
+            <Button variant="secondary" onClick={() => setFormOpen(false)} disabled={saving}>{t("action.cancel", lang)}</Button>
+            <Button variant="gold" onClick={handleSave} disabled={saving}>{saving ? t("action.saving", lang) : t("action.save", lang)}</Button>
           </>
         }
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <Input label="Full name" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} error={formError && !form.full_name.trim() ? formError : undefined} />
-          <Input label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-          <Input label="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <Select label="Tier" value={form.tier} onChange={(e) => setForm({ ...form, tier: e.target.value })} options={TIERS} />
-          <Input label="Notes" value={form.internal_notes} onChange={(e) => setForm({ ...form, internal_notes: e.target.value })} hint="Private -- visible only to your team" />
+          <Input label={t("clients.fullName", lang)} value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} error={formError && !form.full_name.trim() ? formError : undefined} />
+          <Input label={t("clients.phone", lang)} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          <Input label={t("clients.email", lang)} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          <Select
+            label={t("clients.tier", lang)}
+            value={form.tier}
+            onChange={(e) => setForm({ ...form, tier: e.target.value })}
+            options={TIERS.map((tier) => ({ value: tier, label: translateEnum("tier", tier, lang) }))}
+          />
+          <Input label={t("clients.notes", lang)} value={form.internal_notes} onChange={(e) => setForm({ ...form, internal_notes: e.target.value })} hint={t("clients.notesHint", lang)} />
           {formError && form.full_name.trim() && <p style={{ margin: 0, fontSize: 13, color: "var(--error-fg)" }}>{formError}</p>}
         </div>
       </Dialog>
@@ -287,16 +298,16 @@ export default function Clients() {
       <Dialog
         open={!!deleteTarget}
         onClose={() => !deleting && setDeleteTarget(null)}
-        title="Delete client?"
+        title={t("clients.deleteTitle", lang)}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancel</Button>
-            <Button variant="gold" onClick={handleDelete} disabled={deleting}>{deleting ? "Deleting…" : "Delete"}</Button>
+            <Button variant="secondary" onClick={() => setDeleteTarget(null)} disabled={deleting}>{t("action.cancel", lang)}</Button>
+            <Button variant="gold" onClick={handleDelete} disabled={deleting}>{deleting ? t("action.deleting", lang) : t("action.delete", lang)}</Button>
           </>
         }
       >
         <p style={{ margin: 0 }}>
-          {deleteTarget && `This will permanently remove ${deleteTarget.full_name}. This can't be undone.`}
+          {deleteTarget && t("clients.deleteBody", lang, { name: deleteTarget.full_name })}
         </p>
         {deleteError && <p style={{ margin: "10px 0 0", fontSize: 13, color: "var(--error-fg)" }}>{deleteError}</p>}
       </Dialog>

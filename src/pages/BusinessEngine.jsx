@@ -7,6 +7,8 @@ import { getRevenueSeries } from "../services/revenue";
 import { getExpensesSeries } from "../services/expenses";
 import { Skeleton, EmptyState } from "../components/ui";
 import { ErrorState } from "../components/ErrorState";
+import { useAppLang } from "../hooks/useAppLang";
+import { t, intlLocale } from "../lib/i18n";
 import "../styles/beautyroute/styles.css";
 
 // Design migration (full-product-design-migration): fully re-skinned onto
@@ -45,6 +47,7 @@ const ACCENT_COLOR = {
 };
 
 export default function BusinessEngine() {
+  const { lang } = useAppLang();
   const { workspaceId, loading: workspaceLoading, error: workspaceError, refresh: refreshWorkspace } = useCurrentWorkspace();
 
   const [revenueSeries, setRevenueSeries] = useState([]);
@@ -84,7 +87,7 @@ export default function BusinessEngine() {
         setExpenseSeries(expenses);
         setClients((clientRows ?? []).map(toClientViewModel));
       } catch (err) {
-        if (!cancelled) setError(err.message || "Couldn't load your business numbers.");
+        if (!cancelled) setError(err.message || t("business.errorFallback", lang));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -94,6 +97,10 @@ export default function BusinessEngine() {
     return () => {
       cancelled = true;
     };
+    // `lang` is deliberately excluded -- see Appointments.jsx's identical
+    // comment for why (fallback error-message translation only, not worth
+    // an extra fetch on a language switch).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId, workspaceLoading, reloadToken]);
 
   function retry() {
@@ -146,29 +153,28 @@ export default function BusinessEngine() {
   const failed = workspaceError || error;
 
   return (
-    <Layout title="Business Engine" titleAr="الأعمال" subtitle="Revenue, expenses, longest-standing clients and reports — the numbers behind the chair.">
+    <Layout title={t("business.title", lang)} subtitle={t("business.subtitle", lang)}>
       {failed && <ErrorState message={typeof failed === "string" ? failed : failed.message} onRetry={retry} />}
 
       {!failed && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" style={{ marginBottom: "var(--space-6)" }}>
-            {/* en-US pinned explicitly, matching StylistDashboard's
-                toLocaleString("en-US") -- an unpinned call renders with
-                whatever thousands separator the host's default locale
-                uses (e.g. "9 999" instead of "9,999"), which isn't a
-                Riyadh-facing formatting choice. */}
-            <MetricCard label="Revenue (6 mo)" value={isLoading ? "—" : `SAR ${totalRevenue.toLocaleString("en-US")}`} accent="gold" />
-            <MetricCard label="Expenses (6 mo)" value={isLoading ? "—" : `SAR ${totalExpenses.toLocaleString("en-US")}`} accent="danger" />
-            <MetricCard label="Net" value={isLoading ? "—" : `SAR ${(totalRevenue - totalExpenses).toLocaleString("en-US")}`} accent="sage" />
+            {/* Numeral formatting now follows the active language (via
+                intlLocale()) instead of being pinned to en-US unconditionally
+                -- ar-SA renders Arabic-Indic numerals, matching the design
+                reference's own formatSAR() intent for SAR values. */}
+            <MetricCard label={t("business.revenue6mo", lang)} value={isLoading ? "—" : `SAR ${totalRevenue.toLocaleString(intlLocale(lang))}`} accent="gold" />
+            <MetricCard label={t("business.expenses6mo", lang)} value={isLoading ? "—" : `SAR ${totalExpenses.toLocaleString(intlLocale(lang))}`} accent="danger" />
+            <MetricCard label={t("business.net", lang)} value={isLoading ? "—" : `SAR ${(totalRevenue - totalExpenses).toLocaleString(intlLocale(lang))}`} accent="sage" />
           </div>
 
           <div style={{ borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", padding: "var(--space-6)", marginBottom: "var(--space-6)" }}>
-            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h3)", color: "var(--text-primary)", margin: "0 0 var(--space-4)" }}>Revenue vs expenses</h2>
+            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h3)", color: "var(--text-primary)", margin: "0 0 var(--space-4)" }}>{t("business.revenueVsExpenses", lang)}</h2>
             {isLoading && <Skeleton height={260} radius="var(--radius-lg)" />}
             {!isLoading && !hasChartActivity && (
               <EmptyState
-                title="No revenue or expenses yet"
-                description="Once you log completed appointments and expenses, the last 6 months will chart here."
+                title={t("business.emptyChartTitle", lang)}
+                description={t("business.emptyChartDescription", lang)}
               />
             )}
             {!isLoading && hasChartActivity && (
@@ -194,7 +200,7 @@ export default function BusinessEngine() {
           </div>
 
           <div style={{ borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", padding: "var(--space-6)" }}>
-            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h3)", color: "var(--text-primary)", margin: "0 0 var(--space-4)" }}>Longest-standing clients</h2>
+            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h3)", color: "var(--text-primary)", margin: "0 0 var(--space-4)" }}>{t("business.longestStandingClients", lang)}</h2>
 
             {isLoading && (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -205,7 +211,7 @@ export default function BusinessEngine() {
             )}
 
             {!isLoading && longestStandingClients.length === 0 && (
-              <EmptyState title="No clients yet" description="Your longest-standing clients will show up here once you've added some." />
+              <EmptyState title={t("business.emptyClientsTitle", lang)} description={t("business.emptyClientsDescription", lang)} />
             )}
 
             {!isLoading && longestStandingClients.length > 0 && (
@@ -218,7 +224,7 @@ export default function BusinessEngine() {
                       </span>
                       <span style={{ fontSize: 14, color: "var(--text-primary)" }}>{c.name}</span>
                     </div>
-                    <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>client since {c.since}</span>
+                    <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{t("business.clientSince", lang, { date: c.since })}</span>
                   </div>
                 ))}
               </div>

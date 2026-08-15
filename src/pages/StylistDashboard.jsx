@@ -9,6 +9,7 @@ import { getClients } from "../services/clients";
 import { getMonthlyRevenue } from "../services/revenue";
 import { toAppointmentViewModel } from "../lib/appointmentView";
 import { resolveWorkspaceLang } from "../lib/locale";
+import { t, translateEnum, intlLocale } from "../lib/i18n";
 import { Skeleton, EmptyState, Input } from "../components/ui";
 import { ErrorState } from "../components/ErrorState";
 import "../styles/beautyroute/styles.css";
@@ -67,7 +68,7 @@ function StatCard({ value, metric }) {
   );
 }
 
-function BookingRow({ appt, onClick }) {
+function BookingRow({ appt, onClick, lang }) {
   const tone = STATUS_TONE[appt.status] || STATUS_TONE.pending;
   return (
     <button
@@ -94,7 +95,7 @@ function BookingRow({ appt, onClick }) {
         </p>
       </div>
       <span style={{ fontSize: 12, fontWeight: 600, color: tone.fg, background: tone.bg, padding: "4px 10px", borderRadius: "var(--radius-pill)", textTransform: "capitalize", flexShrink: 0 }}>
-        {appt.status}
+        {translateEnum("status", appt.status, lang)}
       </span>
     </button>
   );
@@ -191,14 +192,14 @@ export default function StylistDashboard() {
       <Input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder={lang === "ar" ? "ابحث عن عميلة…" : "Search clients…"}
+        placeholder={t("dashboard.searchPlaceholder", lang)}
         icon={<Search size={15} color="var(--text-tertiary)" />}
       />
       {query && (
         <button
           type="button"
           onClick={() => setQuery("")}
-          aria-label="Clear search"
+          aria-label={t("dashboard.clearSearch", lang)}
           style={{ position: "absolute", right: 12, top: 15, background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--text-tertiary)", display: "flex" }}
         >
           <X size={14} />
@@ -222,7 +223,7 @@ export default function StylistDashboard() {
         >
           {results.length === 0 && (
             <p style={{ padding: "14px 18px", fontSize: "var(--text-body-sm)", color: "var(--text-tertiary)", margin: 0 }}>
-              No client matches "{query}".
+              {t("dashboard.noClientMatch", lang, { query })}
             </p>
           )}
           {results.map((c) => (
@@ -234,7 +235,7 @@ export default function StylistDashboard() {
               <img src={c.photo} alt="" style={{ height: 32, width: 32, borderRadius: "var(--radius-pill)", objectFit: "cover", background: "var(--bg-sunken)" }} />
               <div style={{ minWidth: 0 }}>
                 <p style={{ margin: 0, fontSize: "var(--text-body-sm)", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</p>
-                <p style={{ margin: 0, fontSize: "var(--text-caption)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Last visit {c.lastVisit}</p>
+                <p style={{ margin: 0, fontSize: "var(--text-caption)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t("dashboard.lastVisit", lang, { date: c.lastVisit })}</p>
               </div>
             </button>
           ))}
@@ -245,8 +246,7 @@ export default function StylistDashboard() {
 
   return (
     <Layout
-      title={isLoading ? "Good to see you" : `Good to see you, ${firstName}`}
-      titleAr="أهلاً بك"
+      title={isLoading ? t("dashboard.greeting", lang) : t("dashboard.greeting", lang, { name: firstName })}
       headerActions={search}
     >
       {failed && <ErrorState message={typeof failed === "string" ? failed : failed.message} onRetry={retry} />}
@@ -263,21 +263,21 @@ export default function StylistDashboard() {
               </>
             ) : (
               <>
-                <StatCard value={todays.length} metric="appointments today" />
-                <StatCard value={clients.length} metric="active client passports" />
-                <StatCard value={`SAR ${(monthlyRevenue ?? 0).toLocaleString("en-US")}`} metric="revenue this month" />
+                <StatCard value={todays.length} metric={t("dashboard.stat.appointmentsToday", lang)} />
+                <StatCard value={clients.length} metric={t("dashboard.stat.activePassports", lang)} />
+                <StatCard value={`SAR ${(monthlyRevenue ?? 0).toLocaleString(intlLocale(lang))}`} metric={t("dashboard.stat.revenueThisMonth", lang)} />
                 {/* No reviews/ratings table exists in the schema yet -- an
                     honest unavailable state, never a fabricated number. */}
-                <StatCard value="Not available" metric="average client rating" />
+                <StatCard value={t("dashboard.notAvailable", lang)} metric={t("dashboard.stat.averageRating", lang)} />
               </>
             )}
           </div>
 
           <div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-4)" }}>
-              <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h3)", color: "var(--text-primary)", margin: 0 }}>Today</h2>
+              <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h3)", color: "var(--text-primary)", margin: 0 }}>{t("dashboard.today", lang)}</h2>
               <Link to="/route" style={{ fontSize: "var(--text-body-sm)", color: "var(--accent-gold-strong)", display: "flex", alignItems: "center", gap: 4, textDecoration: "none" }}>
-                Full map <ArrowUpRight size={13} />
+                {t("dashboard.fullMap", lang)} <ArrowUpRight size={13} />
               </Link>
             </div>
 
@@ -290,11 +290,11 @@ export default function StylistDashboard() {
               )}
 
               {!isLoading && todays.length === 0 && (
-                <EmptyState title="No visits scheduled today" description="Enjoy the quiet — today's bookings will show up here." />
+                <EmptyState title={t("dashboard.emptyTitle", lang)} description={t("dashboard.emptyDescription", lang)} />
               )}
 
               {!isLoading && todays.map((a) => (
-                <BookingRow key={a.id} appt={a} onClick={() => goToPassport(a.clientId)} />
+                <BookingRow key={a.id} appt={a} onClick={() => goToPassport(a.clientId)} lang={lang} />
               ))}
             </div>
           </div>
@@ -302,7 +302,7 @@ export default function StylistDashboard() {
           {!isLoading && todays.length > 0 && (
             <p style={{ fontSize: "var(--text-caption)", color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 6, margin: 0 }}>
               <MapPin size={12} /> {todays[0].location}
-              {todays.length > 1 ? ` and ${todays.length - 1} more stop${todays.length - 1 === 1 ? "" : "s"} today` : ""}
+              {todays.length > 1 ? t("dashboard.moreStops", lang, { count: todays.length - 1 }) : ""}
             </p>
           )}
         </div>

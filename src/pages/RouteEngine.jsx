@@ -11,6 +11,8 @@ import { planRoute, rerouteRoute, RouteUnavailableError } from "../services/rout
 import { optimizeStopOrder } from "../lib/routeOptimizer";
 import { Input, Button, Skeleton, EmptyState } from "../components/ui";
 import { ErrorState } from "../components/ErrorState";
+import { useAppLang } from "../hooks/useAppLang";
+import { t, intlLocale } from "../lib/i18n";
 import "../styles/beautyroute/styles.css";
 
 // Design migration (full-product-design-migration): fully re-skinned onto
@@ -27,8 +29,8 @@ function todayISODate() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function formatTime(ms) {
-  return new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+function formatTime(ms, lang) {
+  return new Date(ms).toLocaleTimeString(intlLocale(lang), { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 function formatDistance(meters) {
@@ -59,6 +61,7 @@ function buildNavigationUrl(order, stopsById, start, end) {
 
 export default function RouteEngine() {
   const navigate = useNavigate();
+  const { lang } = useAppLang();
   const { workspace, workspaceId, loading: workspaceLoading, error: workspaceError, refresh: refreshWorkspace } = useCurrentWorkspace();
   const { subscription, loading: subLoading } = useSubscription(workspaceId);
 
@@ -103,7 +106,7 @@ export default function RouteEngine() {
         setActiveRoute(result.chronological);
         setIsOptimized(false);
       } catch (err) {
-        if (!cancelled) setError(err instanceof RouteUnavailableError ? err : new RouteUnavailableError("unknown", "Couldn't load the route for this date."));
+        if (!cancelled) setError(err instanceof RouteUnavailableError ? err : new RouteUnavailableError("unknown", t("route.loadErrorFallback", lang)));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -114,7 +117,9 @@ export default function RouteEngine() {
       cancelled = true;
     };
     // Deliberately excludes startLocation/endLocation -- those apply on
-    // blur via applyStartEnd(), not on every keystroke.
+    // blur via applyStartEnd(), not on every keystroke. `lang` is also
+    // excluded -- only used for the fallback error message, not worth an
+    // extra route-planning request on a language switch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId, workspaceLoading, date, reloadToken]);
 
@@ -145,7 +150,7 @@ export default function RouteEngine() {
       const result = await rerouteRoute(workspaceId, date, newOrder, startLocation, endLocation);
       setActiveRoute(result);
     } catch (err) {
-      setRerouteError(err instanceof RouteUnavailableError ? err : new RouteUnavailableError("unknown", "Couldn't recalculate the route."));
+      setRerouteError(err instanceof RouteUnavailableError ? err : new RouteUnavailableError("unknown", t("route.rerouteErrorFallback", lang)));
     } finally {
       setRerouting(false);
     }
@@ -183,8 +188,8 @@ export default function RouteEngine() {
   const isEmpty = plan && plan.routeable.length === 0 && plan.missingAddress.length === 0 && plan.unresolved.length === 0;
 
   return (
-    <Layout title="Route Engine" titleAr="المسار" subtitle="Plan today's stops, see estimated travel time, and open the route in your navigation app.">
-      {isLoading && <p style={{ color: "var(--text-tertiary)", fontSize: 14 }}>Loading…</p>}
+    <Layout title={t("route.title", lang)} subtitle={t("route.subtitle", lang)}>
+      {isLoading && <p style={{ color: "var(--text-tertiary)", fontSize: 14 }}>{t("route.loading", lang)}</p>}
 
       {/* Same locked-state pattern as AIEngine.jsx's gated block: a real
           upgrade path (not just descriptive text) via the existing
@@ -195,9 +200,9 @@ export default function RouteEngine() {
           <span style={{ height: 44, width: 44, borderRadius: "50%", background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
             <Lock size={18} color="var(--accent-gold-strong)" />
           </span>
-          <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h2)", color: "var(--text-primary)", margin: "0 0 8px" }}>Route Engine is a Professional feature</h2>
-          <p style={{ color: "var(--text-tertiary)", fontSize: 14, maxWidth: 420, margin: "0 auto 20px" }}>Optimize today's stop order automatically and open the shortest path between appointments in your navigation app.</p>
-          <Button variant="gold" onClick={() => navigate("/pricing")}>View plans</Button>
+          <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h2)", color: "var(--text-primary)", margin: "0 0 8px" }}>{t("route.gatedTitle", lang)}</h2>
+          <p style={{ color: "var(--text-tertiary)", fontSize: 14, maxWidth: 420, margin: "0 auto 20px" }}>{t("route.gatedDescription", lang)}</p>
+          <Button variant="gold" onClick={() => navigate("/pricing")}>{t("route.viewPlans", lang)}</Button>
         </div>
       )}
 
@@ -205,13 +210,13 @@ export default function RouteEngine() {
         <FeatureGate subscription={subscription} feature="routing">
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 14, marginBottom: "var(--space-6)" }}>
             <div style={{ width: 160 }}>
-              <Input label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <Input label={t("route.dateLabel", lang)} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
             <div style={{ flex: 1, minWidth: 200 }}>
-              <Input label="Starting location (optional)" value={startLocation} onChange={(e) => setStartLocation(e.target.value)} onBlur={applyStartEnd} placeholder="e.g. home address" />
+              <Input label={t("route.startingLocation", lang)} value={startLocation} onChange={(e) => setStartLocation(e.target.value)} onBlur={applyStartEnd} placeholder={t("route.startingLocationPlaceholder", lang)} />
             </div>
             <div style={{ flex: 1, minWidth: 200 }}>
-              <Input label="Ending location (optional)" value={endLocation} onChange={(e) => setEndLocation(e.target.value)} onBlur={applyStartEnd} placeholder="defaults to last stop" />
+              <Input label={t("route.endingLocation", lang)} value={endLocation} onChange={(e) => setEndLocation(e.target.value)} onBlur={applyStartEnd} placeholder={t("route.endingLocationPlaceholder", lang)} />
             </div>
             <p style={{ fontSize: 12, color: "var(--text-tertiary)", paddingBottom: 12, margin: 0 }}>{workspace?.display_brand || workspace?.name}</p>
           </div>
@@ -226,13 +231,13 @@ export default function RouteEngine() {
           )}
 
           {!failed && !loading && isEmpty && (
-            <EmptyState title="No appointments on this date" description="Pick another date, or check back once appointments are booked." />
+            <EmptyState title={t("route.emptyTitle", lang)} description={t("route.emptyDescription", lang)} />
           )}
 
           {!failed && !loading && plan && !isEmpty && (
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
               <div style={{ borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", padding: "var(--space-6)" }}>
-                <RouteMap stops={orderedStops} start={plan.start} end={plan.end} geometry={activeRoute?.geometry} conflictIds={conflictIds} />
+                <RouteMap stops={orderedStops} start={plan.start} end={plan.end} geometry={activeRoute?.geometry} conflictIds={conflictIds} lang={lang} />
 
                 {rerouteError && (
                   <p style={{ fontSize: 12, color: "var(--error-fg)", marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}>
@@ -260,7 +265,7 @@ export default function RouteEngine() {
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <p style={{ margin: 0, fontSize: 14, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.clientName}</p>
                           <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            <MapPin size={11} /> {s.address} · {formatTime(s.startTimeMs)}
+                            <MapPin size={11} /> {s.address} · {formatTime(s.startTimeMs, lang)}
                           </p>
                           {conflict && (
                             <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--error-fg)", display: "flex", alignItems: "center", gap: 4 }}>
@@ -269,10 +274,10 @@ export default function RouteEngine() {
                           )}
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 2, flexShrink: 0 }}>
-                          <button onClick={() => moveStop(i, -1)} disabled={i === 0 || rerouting} aria-label="Move up" style={{ background: "none", border: "none", padding: 4, cursor: "pointer", color: "var(--text-tertiary)", opacity: i === 0 || rerouting ? 0.3 : 1 }}>
+                          <button onClick={() => moveStop(i, -1)} disabled={i === 0 || rerouting} aria-label={t("route.moveUp", lang)} style={{ background: "none", border: "none", padding: 4, cursor: "pointer", color: "var(--text-tertiary)", opacity: i === 0 || rerouting ? 0.3 : 1 }}>
                             <ArrowUp size={14} />
                           </button>
-                          <button onClick={() => moveStop(i, 1)} disabled={i === orderedStops.length - 1 || rerouting} aria-label="Move down" style={{ background: "none", border: "none", padding: 4, cursor: "pointer", color: "var(--text-tertiary)", opacity: i === orderedStops.length - 1 || rerouting ? 0.3 : 1 }}>
+                          <button onClick={() => moveStop(i, 1)} disabled={i === orderedStops.length - 1 || rerouting} aria-label={t("route.moveDown", lang)} style={{ background: "none", border: "none", padding: 4, cursor: "pointer", color: "var(--text-tertiary)", opacity: i === orderedStops.length - 1 || rerouting ? 0.3 : 1 }}>
                             <ArrowDown size={14} />
                           </button>
                         </div>
@@ -283,10 +288,10 @@ export default function RouteEngine() {
 
                 {plan.missingAddress.length > 0 && (
                   <div style={{ marginTop: "var(--space-6)", borderRadius: "var(--radius-md)", border: "1px dashed var(--border-default)", padding: "var(--space-4)" }}>
-                    <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-overline)", color: "var(--text-tertiary)", margin: "0 0 8px" }}>Missing an address ({plan.missingAddress.length})</p>
+                    <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-overline)", color: "var(--text-tertiary)", margin: "0 0 8px" }}>{t("route.missingAddress", lang, { count: plan.missingAddress.length })}</p>
                     {plan.missingAddress.map((a) => (
                       <p key={a.id} style={{ fontSize: 13, color: "var(--text-tertiary)", margin: "4px 0" }}>
-                        {a.clientName} · {formatTime(a.startTimeMs)} — add an address on this appointment to include it in the route.
+                        {t("route.missingAddressNote", lang, { client: a.clientName, time: formatTime(a.startTimeMs, lang) })}
                       </p>
                     ))}
                   </div>
@@ -294,10 +299,10 @@ export default function RouteEngine() {
 
                 {plan.unresolved.length > 0 && (
                   <div style={{ marginTop: "var(--space-4)", borderRadius: "var(--radius-md)", border: "1px dashed var(--error-fg)", padding: "var(--space-4)" }}>
-                    <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-overline)", color: "var(--error-fg)", margin: "0 0 8px" }}>Address couldn't be located ({plan.unresolved.length})</p>
+                    <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-overline)", color: "var(--error-fg)", margin: "0 0 8px" }}>{t("route.unresolvedAddress", lang, { count: plan.unresolved.length })}</p>
                     {plan.unresolved.map((a) => (
                       <p key={a.id} style={{ fontSize: 13, color: "var(--text-tertiary)", margin: "4px 0" }}>
-                        {a.clientName} · {formatTime(a.startTimeMs)} — "{a.address}" wasn't found on the map. Check the address for typos.
+                        {t("route.unresolvedAddressNote", lang, { client: a.clientName, time: formatTime(a.startTimeMs, lang), address: a.address })}
                       </p>
                     ))}
                   </div>
@@ -305,32 +310,32 @@ export default function RouteEngine() {
 
                 {(plan.startUnresolved || plan.endUnresolved) && (
                   <p style={{ fontSize: 12, color: "var(--error-fg)", marginTop: 10 }}>
-                    {plan.startUnresolved && "Starting location wasn't found. "}
-                    {plan.endUnresolved && "Ending location wasn't found."}
+                    {plan.startUnresolved && t("route.startUnresolved", lang)}
+                    {plan.endUnresolved && t("route.endUnresolved", lang)}
                   </p>
                 )}
               </div>
 
               <div style={{ borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", padding: "var(--space-6)", height: "fit-content", display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
-                <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h3)", color: "var(--text-primary)", margin: 0 }}>Today's route</h2>
-                <Stat icon={MapPin} label="Total distance" value={formatDistance(activeRoute?.totalDistanceMeters)} />
-                <Stat icon={Clock} label="Travel time" value={formatDuration(activeRoute?.totalDurationSeconds)} />
+                <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h3)", color: "var(--text-primary)", margin: 0 }}>{t("route.todaysRoute", lang)}</h2>
+                <Stat icon={MapPin} label={t("route.totalDistance", lang)} value={formatDistance(activeRoute?.totalDistanceMeters)} />
+                <Stat icon={Clock} label={t("route.travelTime", lang)} value={formatDuration(activeRoute?.totalDurationSeconds)} />
                 {activeRoute?.conflicts?.length > 0 && (
                   <div style={{ borderRadius: "var(--radius-md)", border: "1px solid var(--error-fg)", background: "var(--error-bg)", padding: "10px 12px", fontSize: 12, color: "var(--error-fg)", display: "flex", alignItems: "flex-start", gap: 8 }}>
                     <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 2 }} />
-                    <span>{activeRoute.conflicts.length} appointment{activeRoute.conflicts.length > 1 ? "s" : ""} may run late based on estimated travel time.</span>
+                    <span>{t("route.conflictWarning", lang, { count: activeRoute.conflicts.length })}</span>
                   </div>
                 )}
                 <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "-8px 0 0" }}>
-                  {isOptimized ? "Estimated best order — a heuristic, not a guaranteed optimum." : "Scheduled order (by appointment time)."}
+                  {isOptimized ? t("route.orderOptimized", lang) : t("route.orderScheduled", lang)}
                 </p>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 8, borderTop: "1px solid var(--border-subtle)" }}>
                   <Button variant="gold" icon={<Sparkles size={14} />} onClick={handleOptimize} disabled={rerouting || orderedStops.length < 3}>
-                    {rerouting ? "Calculating…" : "Optimize route"}
+                    {rerouting ? t("route.calculating", lang) : t("route.optimizeRoute", lang)}
                   </Button>
                   <Button variant="secondary" icon={<RotateCcw size={14} />} onClick={handleReset} disabled={!isOptimized || rerouting}>
-                    Reset order
+                    {t("route.resetOrder", lang)}
                   </Button>
                   <a
                     href={navUrl ?? undefined}
@@ -357,7 +362,7 @@ export default function RouteEngine() {
                       pointerEvents: navUrl ? "auto" : "none",
                     }}
                   >
-                    <Navigation size={14} /> Open in navigation
+                    <Navigation size={14} /> {t("route.openInNavigation", lang)}
                   </a>
                 </div>
               </div>

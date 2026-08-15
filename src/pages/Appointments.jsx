@@ -6,6 +6,8 @@ import { getAppointments, createAppointment, updateAppointment, deleteAppointmen
 import { getClients } from "../services/clients";
 import { getServices } from "../services/services";
 import { toAppointmentViewModel } from "../lib/appointmentView";
+import { useAppLang } from "../hooks/useAppLang";
+import { t, translateEnum, intlLocale } from "../lib/i18n";
 import { Button, Input, Select, Tag, Dialog, Skeleton, EmptyState } from "../components/ui";
 import { ErrorState } from "../components/ErrorState";
 import "../styles/beautyroute/styles.css";
@@ -43,6 +45,7 @@ function emptyForm() {
 }
 
 export default function Appointments() {
+  const { lang } = useAppLang();
   const { workspaceId, loading: workspaceLoading, error: workspaceError, refresh: refreshWorkspace } = useCurrentWorkspace();
   const [appointments, setAppointments] = useState([]);
   const [clients, setClients] = useState([]);
@@ -94,7 +97,7 @@ export default function Appointments() {
         setClients(clientRows ?? []);
         setServices((serviceRows ?? []).filter((s) => s.is_active));
       } catch (err) {
-        if (!cancelled) setError(err.message || "Couldn't load your appointments.");
+        if (!cancelled) setError(err.message || t("appointments.errorFallback", lang));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -104,6 +107,11 @@ export default function Appointments() {
     return () => {
       cancelled = true;
     };
+    // `lang` is deliberately excluded -- it's only used for the fallback
+    // error-message translation inside this effect's catch(), and
+    // re-running the fetch on a language switch would be a real, wasteful,
+    // unnecessary network request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId, workspaceLoading, reloadToken]);
 
   function retry() {
@@ -162,9 +170,9 @@ export default function Appointments() {
 
   function validate() {
     const errors = {};
-    if (!form.clientId) errors.clientId = "Select a client.";
-    if (!form.date) errors.date = "Pick a date.";
-    if (!form.time) errors.time = "Pick a start time.";
+    if (!form.clientId) errors.clientId = t("appointments.validation.client", lang);
+    if (!form.date) errors.date = t("appointments.validation.date", lang);
+    if (!form.time) errors.time = t("appointments.validation.time", lang);
     return errors;
   }
 
@@ -202,7 +210,7 @@ export default function Appointments() {
       setModalOpen(false);
       refresh();
     } catch (err) {
-      setFormError(err.message || "Couldn't save this appointment.");
+      setFormError(err.message || t("appointments.saveErrorFallback", lang));
     } finally {
       setSaving(false);
     }
@@ -221,7 +229,7 @@ export default function Appointments() {
       setCancelTarget(null);
       refresh();
     } catch (err) {
-      setActionError(err.message || "Couldn't cancel this appointment.");
+      setActionError(err.message || t("appointments.cancelErrorFallback", lang));
     } finally {
       setActing(false);
     }
@@ -236,7 +244,7 @@ export default function Appointments() {
       setDeleteTarget(null);
       refresh();
     } catch (err) {
-      setActionError(err.message || "Couldn't delete this appointment.");
+      setActionError(err.message || t("appointments.deleteErrorFallback", lang));
     } finally {
       setActing(false);
     }
@@ -244,18 +252,18 @@ export default function Appointments() {
 
   return (
     <Layout
-      title="Appointment Engine"
-      subtitle="Booking, calendar, waiting list, cancellations and reminders — all in one thread."
+      title={t("appointments.title", lang)}
+      subtitle={t("appointments.subtitle", lang)}
       headerActions={
         <Button variant="gold" icon={<Plus size={16} />} onClick={openCreate} disabled={isLoading || !!failed}>
-          New booking
+          {t("appointments.newBooking", lang)}
         </Button>
       }
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: "var(--space-6)", overflowX: "auto", paddingBottom: 4 }}>
         {dates.map((d) => (
           <Tag key={d} selected={active === d} onClick={() => setActive(d)}>
-            {new Date(d).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
+            {new Date(d).toLocaleDateString(intlLocale(lang), { weekday: "short", day: "numeric", month: "short" })}
           </Tag>
         ))}
       </div>
@@ -271,7 +279,7 @@ export default function Appointments() {
       )}
 
       {!failed && !isLoading && dayAppts.length === 0 && (
-        <EmptyState title="Nothing booked yet" description="Appointments booked for this day will show up here." />
+        <EmptyState title={t("appointments.emptyTitle", lang)} description={t("appointments.emptyDescription", lang)} />
       )}
 
       {!failed && !isLoading && (
@@ -301,7 +309,7 @@ export default function Appointments() {
                 <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--text-tertiary)" }}>{a.service}</p>
                 <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
                   <MapPin size={12} /> {a.location}
-                  <Clock size={12} style={{ marginLeft: 12 }} /> ~45 min
+                  <Clock size={12} style={{ marginLeft: 12 }} /> {t("appointments.travelPlaceholder", lang)}
                 </p>
               </button>
               <span
@@ -316,13 +324,13 @@ export default function Appointments() {
                   color: "var(--" + STATUS_TONE[a.status] + "-fg)",
                 }}
               >
-                {a.status}
+                {translateEnum("status", a.status, lang)}
               </span>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                 {a.status !== "cancelled" && (
-                  <Button variant="ghost" size="sm" onClick={() => { setCancelTarget(a); setActionError(""); }}>Cancel</Button>
+                  <Button variant="ghost" size="sm" onClick={() => { setCancelTarget(a); setActionError(""); }}>{t("action.cancel", lang)}</Button>
                 )}
-                <Button variant="ghost" size="sm" onClick={() => { setDeleteTarget(a); setActionError(""); }}>Delete</Button>
+                <Button variant="ghost" size="sm" onClick={() => { setDeleteTarget(a); setActionError(""); }}>{t("action.delete", lang)}</Button>
               </div>
             </div>
           ))}
@@ -330,19 +338,18 @@ export default function Appointments() {
       )}
 
       <div style={{ marginTop: "var(--space-8)", borderRadius: "var(--radius-lg)", border: "1px dashed var(--border-default)", padding: "var(--space-5)", fontSize: "var(--text-body-sm)", color: "var(--text-tertiary)" }}>
-        Coming to this engine: waiting-list auto-fill when a slot cancels, peak-day pricing suggestions,
-        and WhatsApp-native reminders sent 24h and 2h before each visit.
+        {t("appointments.comingSoon", lang)}
       </div>
 
       <Dialog
         open={modalOpen}
         onClose={() => !saving && setModalOpen(false)}
-        title={editingId ? "Edit booking" : "New booking"}
+        title={editingId ? t("appointments.editBooking", lang) : t("appointments.newBookingTitle", lang)}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setModalOpen(false)} disabled={saving}>Cancel</Button>
+            <Button variant="secondary" onClick={() => setModalOpen(false)} disabled={saving}>{t("action.cancel", lang)}</Button>
             <Button variant="gold" onClick={handleSubmit} disabled={saving}>
-              {saving ? "Saving…" : editingId ? "Save changes" : "Book appointment"}
+              {saving ? t("action.saving", lang) : editingId ? t("appointments.saveChanges", lang) : t("appointments.bookAppointment", lang)}
             </Button>
           </>
         }
@@ -362,23 +369,23 @@ export default function Appointments() {
               oversized rather than a compact, operational form. */}
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <Select
-              label="Client"
+              label={t("appointments.client", lang)}
               value={form.clientId}
               onChange={(e) => setForm({ ...form, clientId: e.target.value })}
-              placeholder="Select a client…"
+              placeholder={t("appointments.selectClient", lang)}
               options={clients.map((c) => ({ value: c.id, label: c.full_name }))}
             />
             {formErrors.clientId && <p style={{ margin: "-6px 0 0", fontSize: 12, color: "var(--error-fg)" }}>{formErrors.clientId}</p>}
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <Input label="Date" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} error={formErrors.date} />
-              <Input label="Start time" type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} error={formErrors.time} />
+              <Input label={t("appointments.date", lang)} type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} error={formErrors.date} />
+              <Input label={t("appointments.startTime", lang)} type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} error={formErrors.time} />
             </div>
 
             <fieldset style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-              <legend style={{ display: "block", width: "100%", padding: 0, fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>Services</legend>
+              <legend style={{ display: "block", width: "100%", padding: 0, fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>{t("appointments.services", lang)}</legend>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {services.length === 0 && <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: 0 }}>No active services yet.</p>}
+                {services.length === 0 && <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: 0 }}>{t("appointments.noActiveServices", lang)}</p>}
                 {services.map((s) => (
                   <Tag key={s.id} selected={form.serviceIds.includes(s.id)} onClick={() => toggleService(s.id)}>
                     {s.name} · {s.duration_minutes}min
@@ -388,8 +395,13 @@ export default function Appointments() {
             </fieldset>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 10 }}>
-              <Select label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} options={STATUSES} />
-              <Input label="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Al Narjis, Riyadh" />
+              <Select
+                label={t("appointments.status", lang)}
+                value={form.status}
+                onChange={(e) => setForm({ ...form, status: e.target.value })}
+                options={STATUSES.map((s) => ({ value: s, label: translateEnum("status", s, lang) }))}
+              />
+              <Input label={t("appointments.location", lang)} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder={t("appointments.locationPlaceholder", lang)} />
             </div>
 
             {formError && <p style={{ margin: 0, fontSize: 13, color: "var(--error-fg)" }}>{formError}</p>}
@@ -400,30 +412,30 @@ export default function Appointments() {
       <Dialog
         open={!!cancelTarget}
         onClose={() => !acting && setCancelTarget(null)}
-        title="Cancel this appointment?"
+        title={t("appointments.cancelTitle", lang)}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setCancelTarget(null)} disabled={acting}>Never mind</Button>
-            <Button variant="gold" onClick={handleCancel} disabled={acting}>{acting ? "Working…" : "Cancel booking"}</Button>
+            <Button variant="secondary" onClick={() => setCancelTarget(null)} disabled={acting}>{t("action.neverMind", lang)}</Button>
+            <Button variant="gold" onClick={handleCancel} disabled={acting}>{acting ? t("action.working", lang) : t("appointments.cancelBooking", lang)}</Button>
           </>
         }
       >
-        <p style={{ margin: 0 }}>{cancelTarget && `${cancelTarget.client} at ${cancelTarget.time} will be marked as cancelled.`}</p>
+        <p style={{ margin: 0 }}>{cancelTarget && t("appointments.cancelBody", lang, { client: cancelTarget.client, time: cancelTarget.time })}</p>
         {actionError && <p style={{ margin: "10px 0 0", fontSize: 13, color: "var(--error-fg)" }}>{actionError}</p>}
       </Dialog>
 
       <Dialog
         open={!!deleteTarget}
         onClose={() => !acting && setDeleteTarget(null)}
-        title="Delete this appointment?"
+        title={t("appointments.deleteTitle", lang)}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setDeleteTarget(null)} disabled={acting}>Never mind</Button>
-            <Button variant="gold" onClick={handleDelete} disabled={acting}>{acting ? "Working…" : "Delete"}</Button>
+            <Button variant="secondary" onClick={() => setDeleteTarget(null)} disabled={acting}>{t("action.neverMind", lang)}</Button>
+            <Button variant="gold" onClick={handleDelete} disabled={acting}>{acting ? t("action.working", lang) : t("action.delete", lang)}</Button>
           </>
         }
       >
-        <p style={{ margin: 0 }}>{deleteTarget && `This permanently removes ${deleteTarget.client}'s booking at ${deleteTarget.time}. This can't be undone.`}</p>
+        <p style={{ margin: 0 }}>{deleteTarget && t("appointments.deleteBody", lang, { client: deleteTarget.client, time: deleteTarget.time })}</p>
         {actionError && <p style={{ margin: "10px 0 0", fontSize: 13, color: "var(--error-fg)" }}>{actionError}</p>}
       </Dialog>
     </Layout>
