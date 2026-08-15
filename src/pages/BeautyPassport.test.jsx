@@ -53,16 +53,15 @@ const CLIENTS = [
   { id: "c1", full_name: "Amira Al-Fahad", phone: "+966500000001", email: "amira@example.com", tier: "Gold", allergies: [], internal_notes: "", created_at: "2026-01-01T00:00:00.000Z", last_visit_at: null },
 ];
 
-// BeautyPassport.jsx's local <Field> renders `<div><p>{label}</p>{children}</div>`
-// with no htmlFor/wrapping <label> -- there is no real accessible-label
-// association to query by. The input is always the label paragraph's next
-// sibling, so that's the reliable way to reach it from the test. Scoped to
-// the visit-log <form> specifically: the passport cover's "Notes" InfoCard
-// (client.internal_notes) uses the same label text and is always rendered
-// behind the form while it's open, so an unscoped query is ambiguous.
+// Design migration (full-product-design-migration): the visit-log form now
+// uses the shared Input/Select components, which give every field a real
+// <label htmlFor> association -- getByLabelText works directly. Still
+// scoped to the visit-log <form> specifically: the passport cover's
+// "Notes" InfoCard (client.internal_notes) uses the word "Notes" too, and
+// is always rendered behind the form while it's open.
 function fieldInput(labelText) {
   const form = document.querySelector("form");
-  return within(form).getByText(labelText).nextElementSibling;
+  return within(form).getByLabelText(labelText);
 }
 
 function renderPassport(initialEntry = "/passport?client=c1") {

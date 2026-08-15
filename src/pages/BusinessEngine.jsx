@@ -9,6 +9,14 @@ import { Skeleton, EmptyState } from "../components/ui";
 import { ErrorState } from "../components/ErrorState";
 import "../styles/beautyroute/styles.css";
 
+// Design migration (full-product-design-migration): fully re-skinned onto
+// beautyroute-ds. Every data hook, effect, and piece of state below is
+// byte-for-byte the same as before; only markup/styling changed -- including
+// the recharts colors, which move from hardcoded old-theme hex to the
+// equivalent beautyroute-ds dark-theme token hex (tokens/colors.css's
+// [data-theme="dark"] block) since SVG presentation attributes here take
+// literal color values, not CSS custom properties.
+
 const LONGEST_STANDING_CLIENTS_SHOWN = 5;
 
 // clients table has no photo/avatar column -- explicit placeholder, not
@@ -29,6 +37,12 @@ function initials(name) {
     .map((w) => w[0].toUpperCase())
     .join("");
 }
+
+const ACCENT_COLOR = {
+  gold: "var(--accent-gold-strong)",
+  danger: "var(--error-fg)",
+  sage: "var(--success-fg)",
+};
 
 export default function BusinessEngine() {
   const { workspaceId, loading: workspaceLoading, error: workspaceError, refresh: refreshWorkspace } = useCurrentWorkspace();
@@ -113,9 +127,6 @@ export default function BusinessEngine() {
   // workspace-wide visit-count aggregate that doesn't exist yet
   // (services/visits.ts only exposes getClientVisitHistory(clientId), a
   // per-client query, not a workspace-wide one this page could sort by).
-  // Replaces the old mock's arbitrary array order with a real, sorted
-  // signal -- but naming it accurately matters exactly as much as the data
-  // being real.
   const longestStandingClients = useMemo(
     () =>
       [...clients]
@@ -129,19 +140,12 @@ export default function BusinessEngine() {
   const failed = workspaceError || error;
 
   return (
-    <Layout
-      title="Business Engine"
-      subtitle="Revenue, expenses, longest-standing clients and reports — the numbers behind the chair."
-    >
-      {failed && (
-        <div className="beautyroute-ds">
-          <ErrorState message={typeof failed === "string" ? failed : failed.message} onRetry={retry} />
-        </div>
-      )}
+    <Layout title="Business Engine" titleAr="الأعمال" subtitle="Revenue, expenses, longest-standing clients and reports — the numbers behind the chair.">
+      {failed && <ErrorState message={typeof failed === "string" ? failed : failed.message} onRetry={retry} />}
 
       {!failed && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" style={{ marginBottom: "var(--space-6)" }}>
             {/* en-US pinned explicitly, matching StylistDashboard's
                 toLocaleString("en-US") -- an unpinned call renders with
                 whatever thousands separator the host's default locale
@@ -152,39 +156,37 @@ export default function BusinessEngine() {
             <MetricCard label="Net" value={isLoading ? "—" : `SAR ${(totalRevenue - totalExpenses).toLocaleString("en-US")}`} accent="sage" />
           </div>
 
-          <div className="rounded-2xl border border-line bg-surface p-6 mb-6">
-            <h2 className="font-display text-lg text-ivory mb-4">Revenue vs expenses</h2>
+          <div style={{ borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", padding: "var(--space-6)", marginBottom: "var(--space-6)" }}>
+            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h3)", color: "var(--text-primary)", margin: "0 0 var(--space-4)" }}>Revenue vs expenses</h2>
             {isLoading ? (
-              <div className="beautyroute-ds">
-                <Skeleton height={260} radius="var(--radius-lg)" />
-              </div>
+              <Skeleton height={260} radius="var(--radius-lg)" />
             ) : (
               <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={chartData}>
                   <defs>
                     <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#B9905A" stopOpacity={0.45} />
-                      <stop offset="95%" stopColor="#B9905A" stopOpacity={0} />
+                      <stop offset="5%" stopColor="#D4AF37" stopOpacity={0.45} />
+                      <stop offset="95%" stopColor="#D4AF37" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E8DCCC" />
-                  <XAxis dataKey="month" stroke="#8C7B6C" fontSize={12} />
-                  <YAxis stroke="#8C7B6C" fontSize={12} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(250,247,242,0.08)" />
+                  <XAxis dataKey="month" stroke="#B7A488" fontSize={12} />
+                  <YAxis stroke="#B7A488" fontSize={12} />
                   <Tooltip
-                    contentStyle={{ background: "#FFFFFF", border: "1px solid #E8DCCC", borderRadius: 12, color: "#2B241F" }}
+                    contentStyle={{ background: "#1F1B18", border: "1px solid rgba(250,247,242,0.14)", borderRadius: 12, color: "#FAF7F2" }}
                   />
-                  <Area type="monotone" dataKey="revenue" stroke="#B9905A" fill="url(#rev)" strokeWidth={2} />
-                  <Area type="monotone" dataKey="expenses" stroke="#9C5568" fill="transparent" strokeWidth={2} />
+                  <Area type="monotone" dataKey="revenue" stroke="#D4AF37" fill="url(#rev)" strokeWidth={2} />
+                  <Area type="monotone" dataKey="expenses" stroke="#B0453E" fill="transparent" strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>
             )}
           </div>
 
-          <div className="rounded-2xl border border-line bg-surface p-6">
-            <h2 className="font-display text-lg text-ivory mb-4">Longest-standing clients</h2>
+          <div style={{ borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", padding: "var(--space-6)" }}>
+            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h3)", color: "var(--text-primary)", margin: "0 0 var(--space-4)" }}>Longest-standing clients</h2>
 
             {isLoading && (
-              <div className="beautyroute-ds space-y-3">
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <Skeleton height={40} radius="var(--radius-lg)" />
                 <Skeleton height={40} radius="var(--radius-lg)" />
                 <Skeleton height={40} radius="var(--radius-lg)" />
@@ -192,22 +194,20 @@ export default function BusinessEngine() {
             )}
 
             {!isLoading && longestStandingClients.length === 0 && (
-              <div className="beautyroute-ds">
-                <EmptyState title="No clients yet" description="Your longest-standing clients will show up here once you've added some." />
-              </div>
+              <EmptyState title="No clients yet" description="Your longest-standing clients will show up here once you've added some." />
             )}
 
             {!isLoading && longestStandingClients.length > 0 && (
-              <div className="space-y-2">
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {longestStandingClients.map((c) => (
-                  <div key={c.id} className="flex items-center justify-between border-b border-line py-2 last:border-0">
-                    <div className="flex items-center gap-3">
-                      <span className="h-8 w-8 rounded-full bg-surface-2 flex items-center justify-center text-[11px] font-medium text-wine">
+                  <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border-subtle)", padding: "10px 0" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ height: 30, width: 30, borderRadius: "50%", background: "var(--bg-sunken)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 500, color: "var(--accent-gold-strong)" }}>
                         {initials(c.name)}
                       </span>
-                      <span className="text-ivory text-sm">{c.name}</span>
+                      <span style={{ fontSize: 14, color: "var(--text-primary)" }}>{c.name}</span>
                     </div>
-                    <span className="text-muted text-xs font-mono-tag">client since {c.since}</span>
+                    <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>client since {c.since}</span>
                   </div>
                 ))}
               </div>
@@ -219,17 +219,11 @@ export default function BusinessEngine() {
   );
 }
 
-const accentClass = {
-  gold: "text-gold",
-  danger: "text-danger",
-  sage: "text-sage",
-};
-
 function MetricCard({ label, value, accent }) {
   return (
-    <div className="rounded-2xl border border-line bg-surface p-5">
-      <p className="text-muted text-xs uppercase tracking-wide">{label}</p>
-      <p className={`font-display text-2xl mt-1 ${accentClass[accent]}`}>{value}</p>
+    <div style={{ borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", padding: "var(--space-5)" }}>
+      <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-overline)", color: "var(--text-tertiary)", margin: 0 }}>{label}</p>
+      <p style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h1)", margin: "4px 0 0", color: ACCENT_COLOR[accent] }}>{value}</p>
     </div>
   );
 }
