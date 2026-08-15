@@ -93,4 +93,15 @@ describe("TrialBanner", () => {
     await user.click(screen.getByRole("button", { name: "Upgrade Now" }));
     expect(await screen.findByText("Pricing page")).toBeInTheDocument();
   });
+
+  it("renders in Arabic when the workspace's locale is 'ar', not the English copy", () => {
+    useCurrentWorkspaceMock.mockReturnValue({ workspaceId: "ws-1", workspace: { id: "ws-1", locale: "ar" } });
+    useSessionMock.mockReturnValue({ user: { id: "u1" }, loading: false });
+    useSubscriptionMock.mockReturnValue({ subscription: { subscription_status: "expired" } });
+    renderBanner();
+    expect(screen.getByText("انتهت الفترة التجريبية.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "الترقية الآن" })).toBeInTheDocument();
+    expect(screen.queryByText("Your trial has ended.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Upgrade Now" })).not.toBeInTheDocument();
+  });
 });

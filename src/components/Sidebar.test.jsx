@@ -143,6 +143,19 @@ describe("Sidebar", () => {
       await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
     });
 
+    // Persistence, end-to-end (two halves, matching how it actually works):
+    // (1) the switch writes to the real workspace row via updateWorkspace()
+    // and calls refresh() -- proven above ("calls the real updateWorkspace()
+    // ..."). (2) once the workspace context reflects a persisted locale
+    // (exactly what refresh() pulls from Supabase after a write, and what a
+    // real page refresh/re-login reads on mount), the nav renders that
+    // language -- proven by "shows only the Arabic label when the
+    // workspace's locale is 'ar'" above. The propagation between the two
+    // (React Context re-rendering every consumer on a Provider state
+    // change) is WorkspaceContext.jsx's own mechanism, covered by
+    // WorkspaceContext.test.jsx -- not re-tested here via a mocked hook,
+    // which has no real context-subscription behavior to exercise.
+
     it("shows an error and does not crash when the switch fails", async () => {
       updateWorkspaceMock.mockRejectedValue(new Error("Network error"));
       const user = userEvent.setup();
@@ -151,6 +164,27 @@ describe("Sidebar", () => {
       await user.click(screen.getByRole("button", { name: /العربية/ }));
 
       expect(await screen.findByText("Network error")).toBeInTheDocument();
+    });
+  });
+
+  describe("RTL direction", () => {
+    it("renders the desktop rail with dir=\"ltr\" by default", () => {
+      renderSidebar();
+      expect(screen.getByRole("complementary")).toHaveAttribute("dir", "ltr");
+    });
+
+    it("renders the desktop rail with dir=\"rtl\" when the workspace's locale is 'ar'", () => {
+      useWorkspaceContextMock.mockReturnValue({
+        workspaces: [{ id: "ws-1", name: "Sara's Studio", locale: "ar" }],
+        workspace: { id: "ws-1", name: "Sara's Studio", locale: "ar" },
+        workspaceId: "ws-1",
+        selectWorkspace: vi.fn(),
+        refresh: vi.fn(),
+        loading: false,
+        error: null,
+      });
+      renderSidebar();
+      expect(screen.getByRole("complementary")).toHaveAttribute("dir", "rtl");
     });
   });
 
