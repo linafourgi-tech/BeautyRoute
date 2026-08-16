@@ -588,7 +588,9 @@ function AiResultPanel({ panel, onClose, lang }) {
           />
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
             <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: 0 }}>{t("passport.ai.reviewNote", lang)}</p>
-            <button onClick={copy} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--accent-gold-strong)", background: "none", border: "none", cursor: "pointer", flexShrink: 0, marginLeft: 12 }}>
+            {/* Logical property, not physical marginLeft -- see the same
+                fix in Appointments.jsx for why. */}
+            <button onClick={copy} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--accent-gold-strong)", background: "none", border: "none", cursor: "pointer", flexShrink: 0, marginInlineStart: 12 }}>
               {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? t("passport.ai.copied", lang) : t("passport.ai.copy", lang)}
             </button>
           </div>
