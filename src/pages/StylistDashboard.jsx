@@ -195,12 +195,18 @@ export default function StylistDashboard() {
         placeholder={t("dashboard.searchPlaceholder", lang)}
         icon={<Search size={15} color="var(--text-tertiary)" />}
       />
+      {/* Both the clear button and the dropdown below use insetInlineEnd,
+          not a physical `right` -- Input's own icon already flips
+          correctly under RTL (it's plain flex flow, not absolute
+          positioning), and these two need to anchor to that same "end"
+          edge consistently in both directions rather than staying pinned
+          to the physical right in RTL mode. */}
       {query && (
         <button
           type="button"
           onClick={() => setQuery("")}
           aria-label={t("dashboard.clearSearch", lang)}
-          style={{ position: "absolute", right: 12, top: 15, background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--text-tertiary)", display: "flex" }}
+          style={{ position: "absolute", insetInlineEnd: 12, top: 15, background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--text-tertiary)", display: "flex" }}
         >
           <X size={14} />
         </button>
@@ -213,7 +219,7 @@ export default function StylistDashboard() {
             zIndex: 10,
             marginTop: 8,
             width: 320,
-            right: 0,
+            insetInlineEnd: 0,
             borderRadius: "var(--radius-lg)",
             border: "1px solid var(--border-subtle)",
             background: "var(--surface-card)",

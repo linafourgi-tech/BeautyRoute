@@ -309,7 +309,11 @@ export default function Appointments() {
                 <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--text-tertiary)" }}>{a.service}</p>
                 <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
                   <MapPin size={12} /> {a.location}
-                  <Clock size={12} style={{ marginLeft: 12 }} /> {t("appointments.travelPlaceholder", lang)}
+                  {/* Logical property (auto-flips under RTL), not a
+                      physical marginLeft -- the extra separation from the
+                      location text belongs on the same side regardless of
+                      reading direction. */}
+                  <Clock size={12} style={{ marginInlineStart: 12 }} /> {t("appointments.travelPlaceholder", lang)}
                 </p>
               </button>
               <span

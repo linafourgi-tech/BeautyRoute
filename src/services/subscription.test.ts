@@ -13,6 +13,7 @@ vi.mock("../lib/supabase", () => ({
 
 import {
   getSubscription,
+  invalidateSubscriptionCache,
   getRemainingTrialDays,
   isTrialExpired,
   isTrial,
@@ -36,6 +37,7 @@ describe("getSubscription (service-layer, mocked Supabase boundary)", () => {
 
   beforeEach(() => {
     fromMock.mockReset();
+    invalidateSubscriptionCache(); // isolate tests -- see the cache describe block below
     fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(() => {
       throw new Error("getSubscription must not make a real network request in this test");
     });
@@ -70,6 +72,127 @@ describe("getSubscription (service-layer, mocked Supabase boundary)", () => {
     fromMock.mockReturnValue({ select: chain.select });
 
     await expect(getSubscription("missing-ws")).rejects.toThrow("row not found");
+  });
+});
+
+// Navigation-lag investigation (design-refinement pass): App.jsx's flat
+// routes mean ProtectedRoute (and, on some pages, the page itself) fully
+// unmounts and remounts on every navigation, so a naive getSubscription()
+// would re-hit Supabase on every single page change even though the data
+// essentially never changes mid-session. These tests lock in the two real
+// mechanisms that prevent that: in-flight coalescing (simultaneous callers
+// on one page load share a single request) and a short TTL cache (repeat
+// navigations within the window reuse the same resolved value, no network
+// call at all).
+describe("getSubscription -- in-flight coalescing and short-TTL cache", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fromMock.mockReset();
+    invalidateSubscriptionCache();
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(() => {
+      throw new Error("getSubscription must not make a real network request in this test");
+    });
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it("coalesces simultaneous calls for the same workspaceId into a single Supabase query (e.g. ProtectedRoute + TrialBanner mounting together)", async () => {
+    const row = { id: "ws-1", plan_tier: "Pro", subscription_status: "active", trial_started_at: null, trial_ends_at: null };
+    const chain = buildFromChain({ data: row, error: null });
+    fromMock.mockReturnValue({ select: chain.select });
+
+    const [a, b, c] = await Promise.all([getSubscription("ws-1"), getSubscription("ws-1"), getSubscription("ws-1")]);
+
+    expect(fromMock).toHaveBeenCalledTimes(1);
+    expect(a).toEqual(row);
+    expect(b).toEqual(row);
+    expect(c).toEqual(row);
+  });
+
+  it("does NOT coalesce calls for different workspaceIds -- each gets its own real query", async () => {
+    const chain1 = buildFromChain({ data: { id: "ws-1", plan_tier: "Pro", subscription_status: "active", trial_started_at: null, trial_ends_at: null }, error: null });
+    const chain2 = buildFromChain({ data: { id: "ws-2", plan_tier: "Starter", subscription_status: "active", trial_started_at: null, trial_ends_at: null }, error: null });
+    fromMock.mockReturnValueOnce({ select: chain1.select }).mockReturnValueOnce({ select: chain2.select });
+
+    const [a, b] = await Promise.all([getSubscription("ws-1"), getSubscription("ws-2")]);
+
+    expect(fromMock).toHaveBeenCalledTimes(2);
+    expect(a.id).toBe("ws-1");
+    expect(b.id).toBe("ws-2");
+  });
+
+  it("reuses the cached result for a repeat call within the TTL window -- the core navigation-lag fix: no second Supabase query", async () => {
+    const row = { id: "ws-1", plan_tier: "Pro", subscription_status: "active", trial_started_at: null, trial_ends_at: null };
+    const chain = buildFromChain({ data: row, error: null });
+    fromMock.mockReturnValue({ select: chain.select });
+
+    const first = await getSubscription("ws-1");
+    const second = await getSubscription("ws-1"); // simulates the next navigation's fresh ProtectedRoute mount
+
+    expect(fromMock).toHaveBeenCalledTimes(1);
+    expect(second).toEqual(first);
+  });
+
+  it("fetches fresh again once the TTL window has elapsed", async () => {
+    const row = { id: "ws-1", plan_tier: "Pro", subscription_status: "active", trial_started_at: null, trial_ends_at: null };
+    const chain = buildFromChain({ data: row, error: null });
+    fromMock.mockReturnValue({ select: chain.select });
+
+    await getSubscription("ws-1");
+    vi.setSystemTime(Date.now() + 31_000); // just past the 30s TTL
+    await getSubscription("ws-1");
+
+    expect(fromMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not cache a failed request -- the next call retries against Supabase instead of repeating the same rejection", async () => {
+    const dbError = new Error("temporary outage");
+    const failingChain = buildFromChain({ data: null, error: dbError });
+    fromMock.mockReturnValueOnce({ select: failingChain.select });
+    await expect(getSubscription("ws-1")).rejects.toThrow("temporary outage");
+
+    const row = { id: "ws-1", plan_tier: "Pro", subscription_status: "active", trial_started_at: null, trial_ends_at: null };
+    const okChain = buildFromChain({ data: row, error: null });
+    fromMock.mockReturnValueOnce({ select: okChain.select });
+    const result = await getSubscription("ws-1");
+
+    expect(fromMock).toHaveBeenCalledTimes(2);
+    expect(result).toEqual(row);
+  });
+
+  it("invalidateSubscriptionCache(workspaceId) forces the next call to hit Supabase again, for a caller that needs guaranteed-fresh data", async () => {
+    const row = { id: "ws-1", plan_tier: "Pro", subscription_status: "active", trial_started_at: null, trial_ends_at: null };
+    const chain = buildFromChain({ data: row, error: null });
+    fromMock.mockReturnValue({ select: chain.select });
+
+    await getSubscription("ws-1");
+    invalidateSubscriptionCache("ws-1");
+    await getSubscription("ws-1");
+
+    expect(fromMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("invalidateSubscriptionCache(workspaceId) only clears that workspace's entry, not every cached workspace", async () => {
+    const chain1 = buildFromChain({ data: { id: "ws-1", plan_tier: "Pro", subscription_status: "active", trial_started_at: null, trial_ends_at: null }, error: null });
+    const chain2 = buildFromChain({ data: { id: "ws-2", plan_tier: "Starter", subscription_status: "active", trial_started_at: null, trial_ends_at: null }, error: null });
+    const chain1Again = buildFromChain({ data: { id: "ws-1", plan_tier: "Pro", subscription_status: "active", trial_started_at: null, trial_ends_at: null }, error: null });
+    fromMock
+      .mockReturnValueOnce({ select: chain1.select })
+      .mockReturnValueOnce({ select: chain2.select })
+      .mockReturnValueOnce({ select: chain1Again.select });
+
+    await getSubscription("ws-1");
+    await getSubscription("ws-2");
+    invalidateSubscriptionCache("ws-1");
+    await getSubscription("ws-1"); // re-fetches
+    await getSubscription("ws-2"); // still cached
+
+    expect(fromMock).toHaveBeenCalledTimes(3);
   });
 });
 
