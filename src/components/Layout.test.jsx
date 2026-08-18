@@ -55,10 +55,35 @@ describe("Layout", () => {
     expect(screen.getByText("Real page content")).toBeInTheDocument();
   });
 
-  it("renders the title and Arabic title when provided", () => {
-    renderLayout({ title: "Good to see you, Sara", titleAr: "أهلاً بك" });
+  it("renders the title exactly as given -- Layout no longer accepts a separate titleAr prop", () => {
+    renderLayout({ title: "Good to see you, Sara" });
     expect(screen.getByText("Good to see you, Sara")).toBeInTheDocument();
-    expect(screen.getByText("أهلاً بك")).toBeInTheDocument();
+  });
+
+  // Localization fix (design-refinement pass): Layout used to accept a
+  // titleAr prop and show BOTH languages in the header unconditionally,
+  // regardless of any language selection. Every Layout caller now passes a
+  // single, already-resolved title/subtitle; Layout itself is responsible
+  // only for direction, driven by the workspace's real locale column.
+  it("sets dir=\"ltr\" on its root when the workspace has no locale set (default)", () => {
+    const { container } = renderLayout();
+    expect(container.firstChild).toHaveAttribute("dir", "ltr");
+  });
+
+  it("sets dir=\"rtl\" on its root when the workspace's locale is 'ar'", () => {
+    // useAppLang() reads useCurrentWorkspace() directly (not
+    // useWorkspaceContext() -- that's what Sidebar/TrialBanner use), so
+    // this mock is the one that drives Layout's own dir resolution.
+    useCurrentWorkspaceMock.mockReturnValue({ workspaceId: "ws-1", loading: false, workspace: { id: "ws-1", locale: "ar" } });
+    const { container } = renderLayout();
+    expect(container.firstChild).toHaveAttribute("dir", "rtl");
+  });
+
+  it("syncs document.documentElement's dir/lang to the workspace's language", () => {
+    useCurrentWorkspaceMock.mockReturnValue({ workspaceId: "ws-1", loading: false, workspace: { id: "ws-1", locale: "ar" } });
+    renderLayout();
+    expect(document.documentElement.dir).toBe("rtl");
+    expect(document.documentElement.lang).toBe("ar");
   });
 
   it("renders the subtitle when provided", () => {
@@ -89,5 +114,22 @@ describe("Layout", () => {
     renderLayout();
     expect(screen.queryByText(/free trial ends/)).not.toBeInTheDocument();
     expect(screen.queryByText(/trial has ended/)).not.toBeInTheDocument();
+  });
+
+  it("opts the authenticated shell into the dark beautyroute-ds theme (Phase 2: matches the Claude Design reference) -- Login/Signup are untouched by this, they don't render Layout", () => {
+    const { container } = renderLayout();
+    const root = container.firstChild;
+    expect(root).toHaveClass("beautyroute-ds");
+    expect(root).toHaveAttribute("data-theme", "dark");
+  });
+
+  it("renders headerActions inline in the header row when provided", () => {
+    renderLayout({ title: "Good to see you, Sara", headerActions: <button>Search</button> });
+    expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
+  });
+
+  it("renders no headerActions when none is passed -- doesn't invent one", () => {
+    renderLayout({ title: "Good to see you, Sara" });
+    expect(screen.queryByRole("button", { name: "Search" })).not.toBeInTheDocument();
   });
 });

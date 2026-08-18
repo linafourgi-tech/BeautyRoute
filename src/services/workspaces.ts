@@ -30,7 +30,13 @@ const UPDATABLE_WORKSPACE_FIELDS = [
 // from this row. getWorkspaceById() below is left as select('*')
 // deliberately: it has no current caller anywhere in the app (confirmed),
 // so there's nothing to verify a narrower column list against.
-const WORKSPACE_LIST_COLUMNS = 'id, name, display_brand'
+//
+// `locale` added (design-refinement pass): the column already exists on
+// this table (see supabase-types.ts) and was already selectable -- Sidebar
+// now reads it to decide which of a nav item's two language labels to
+// display. This is not a new field or a schema change, just the first real
+// consumer of a column that previously had none.
+const WORKSPACE_LIST_COLUMNS = 'id, name, display_brand, locale'
 
 // 1. Get all workspaces owned by the logged-in user
 export async function getWorkspaces() {

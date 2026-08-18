@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getSubscription, type Subscription } from '../services/subscription'
+import { getSubscription, invalidateSubscriptionCache, type Subscription } from '../services/subscription'
 
 // Centralizes the workspaceId -> getSubscription() pattern that TrialBanner,
 // Pricing, and the route guards all need. Pass null while the workspace is
@@ -17,7 +17,7 @@ export function useSubscription(workspaceId: string | null) {
     }
   }, [])
 
-  const refresh = useCallback(async () => {
+  const load = useCallback(async () => {
     if (!workspaceId) {
       setSubscription(null)
       setLoading(false)
@@ -35,9 +35,22 @@ export function useSubscription(workspaceId: string | null) {
     }
   }, [workspaceId])
 
+  // Runs on every mount (i.e. every navigation, given App.jsx's current
+  // flat routes) -- deliberately reuses getSubscription()'s short-lived
+  // cache rather than forcing a fresh fetch every time. See
+  // services/subscription.ts for why.
   useEffect(() => {
-    refresh()
-  }, [refresh])
+    load()
+  }, [load])
+
+  // Exposed for a caller that needs guaranteed-fresh data on demand (e.g.
+  // right after a real upgrade/downgrade action). Unlike the automatic
+  // mount-triggered load() above, this explicitly invalidates the cache
+  // first, so it never returns a stale cached read.
+  const refresh = useCallback(async () => {
+    if (workspaceId) invalidateSubscriptionCache(workspaceId)
+    await load()
+  }, [workspaceId, load])
 
   return { subscription, loading, error, refresh }
 }

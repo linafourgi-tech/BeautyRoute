@@ -2,6 +2,8 @@ import { useNavigate } from "react-router-dom";
 import { useSession } from "../../hooks/useSession";
 import { useCurrentWorkspace } from "../../hooks/useCurrentWorkspace";
 import { useSubscription } from "../../hooks/useSubscription";
+import { resolveWorkspaceLang } from "../../lib/locale";
+import { t } from "../../lib/i18n";
 import {
   getRemainingTrialDays,
   isTrial,
@@ -16,8 +18,9 @@ import "../../styles/beautyroute/styles.css";
 export function TrialBanner() {
   const navigate = useNavigate();
   const { user, loading: sessionLoading } = useSession();
-  const { workspaceId } = useCurrentWorkspace();
+  const { workspace, workspaceId } = useCurrentWorkspace();
   const { subscription } = useSubscription(user ? workspaceId : null);
+  const lang = resolveWorkspaceLang(workspace);
 
   if (sessionLoading || !user || !subscription) return null;
 
@@ -28,26 +31,33 @@ export function TrialBanner() {
   const warning = expired || isTrialEndingSoon(subscription);
   const days = getRemainingTrialDays(subscription);
 
+  // Design-refinement pass: this used to re-declare className="beautyroute-ds"
+  // on its own root. TrialBanner only ever renders inside Layout, which
+  // already establishes .beautyroute-ds[data-theme="dark"] one level up --
+  // re-declaring the bare class here (without data-theme="dark" on this same
+  // element) matched the *light* .beautyroute-ds rule instead and silently
+  // reset every inherited dark token back to light, which is exactly why the
+  // banner looked visually disconnected from the rest of the dark shell.
+  // Same bug, same fix shape as Sidebar.jsx and ErrorState.jsx.
   return (
     <div
-      className="beautyroute-ds"
       style={{
         display: "flex",
         alignItems: "center",
-        justifyContent: "space-between",
-        gap: 16,
-        padding: "12px 20px",
+        justifyContent: "center",
+        gap: 14,
+        padding: "10px 20px",
         fontFamily: "var(--font-body)",
         fontSize: 13,
         color: warning ? "var(--error-fg)" : "var(--text-secondary)",
-        background: warning ? "var(--error-bg)" : "var(--bg-sunken)",
+        background: warning ? "var(--error-bg)" : "var(--surface-card-alt)",
         borderBottom: "1px solid var(--border-subtle)",
       }}
     >
       <span>
         {expired
-          ? "Your trial has ended."
-          : `Your free trial ends in ${days} day${days === 1 ? "" : "s"}.`}
+          ? t("trial.ended", lang)
+          : t("trial.daysLeft", lang, { days })}
       </span>
       <button
         type="button"
@@ -61,9 +71,10 @@ export function TrialBanner() {
           color: "var(--accent-gold-strong)",
           cursor: "pointer",
           textDecoration: "underline",
+          textUnderlineOffset: 2,
         }}
       >
-        {expired ? "Upgrade Now" : "View plans"}
+        {expired ? t("trial.upgradeNow", lang) : t("trial.viewPlans", lang)}
       </button>
     </div>
   );

@@ -117,9 +117,15 @@ describe("Appointments page", () => {
     expect(screen.queryByText("Bayan Saleh")).not.toBeInTheDocument();
 
     // Day tabs render before the "New booking" button in DOM order, so the
-    // second button here is the second day's tab -- avoids depending on the
-    // exact locale-formatted date label text.
-    const dayTabs = screen.getAllByRole("button").filter((b) => b.textContent !== "New booking");
+    // second remaining button here is the second day's tab -- avoids
+    // depending on the exact locale-formatted date label text. Also
+    // excludes Sidebar's own chrome buttons (its mobile "Open navigation"
+    // toggle and account-footer "Log out", added in the design-system-
+    // dashboard-shell migration) -- both carry an aria-label, which neither
+    // a day tab nor "New booking" does, so filtering those out keeps this
+    // scoped to Appointments' own controls regardless of what Layout's
+    // shared chrome renders around it.
+    const dayTabs = screen.getAllByRole("button").filter((b) => b.textContent !== "New booking" && !b.hasAttribute("aria-label"));
     await user.click(dayTabs[1]);
 
     expect(await screen.findByText("Bayan Saleh")).toBeInTheDocument();
@@ -174,16 +180,20 @@ describe("Appointments page", () => {
     await user.click(screen.getByText("Amira Al-Fahad"));
     const modalHeading = await screen.findByText("Edit booking");
     // The underlying appointment row (still rendered behind the modal) also
-    // contains the text "Haircut" -- scope the query to the modal form so it
-    // can't match the wrong element.
-    const form = modalHeading.closest("form");
+    // contains the text "Haircut" -- scope the query to the dialog panel
+    // (the title's own parent, shared by its body and footer -- see the
+    // shared Dialog component) so it can't match the wrong element. Not
+    // .closest("form"): the shared Dialog renders title/body/footer as
+    // siblings, not nested inside the caller's own <form>.
+    const dialogPanel = modalHeading.parentElement;
     // Each service button now has its own real accessible name (fixed via
     // fieldset/legend -- see the regression test below), so it can be found
     // by role/name like any other button.
-    const serviceChip = within(form).getByRole("button", { name: "Haircut · 45min" });
+    const serviceChip = within(dialogPanel).getByRole("button", { name: "Haircut · 45min" });
     // The service Haircut (s1, from serviceIds) should render as selected --
-    // conveyed both visually (bg-wine class) and to assistive tech (aria-pressed).
-    expect(serviceChip.className).toContain("bg-wine");
+    // conveyed both visually (the shared Tag component's selected-state
+    // background) and to assistive tech (aria-pressed).
+    expect(serviceChip.style.background).toContain("accent-gold");
     expect(serviceChip).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -301,5 +311,22 @@ describe("Appointments page", () => {
 
     await waitFor(() => expect(deleteAppointmentMock).toHaveBeenCalledWith("a1"));
     expect(await screen.findByText("Nothing booked yet")).toBeInTheDocument();
+  });
+
+  // Localization fix (design-refinement pass): the page title/subtitle/
+  // empty-state/primary-action used to be English-only with no Arabic
+  // counterpart at all -- this locks in that switching the workspace's
+  // language actually translates this page's own content, not just the
+  // Sidebar around it.
+  it("renders in Arabic -- title, empty state, and primary action -- when the workspace's locale is 'ar', with no leftover English UI", async () => {
+    useCurrentWorkspaceMock.mockReturnValue({ workspaceId: "ws-1", loading: false, error: null, refresh: vi.fn(), workspace: { id: "ws-1", locale: "ar" } });
+    getAppointmentsMock.mockResolvedValue([]);
+    renderAppointments();
+
+    expect(await screen.findByRole("heading", { name: "محرك المواعيد" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "حجز جديد" })).toBeInTheDocument();
+    expect(screen.getByText("لا توجد حجوزات بعد")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Appointment Engine" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Nothing booked yet")).not.toBeInTheDocument();
   });
 });
