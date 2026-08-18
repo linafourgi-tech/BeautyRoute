@@ -1,23 +1,38 @@
 import { useRef, useState, useEffect } from "react";
-import { Sparkles, Send, ShieldAlert } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Sparkles, Send, ShieldAlert, Lock } from "lucide-react";
 import Layout from "../components/Layout";
 import { useCurrentWorkspace } from "../hooks/useCurrentWorkspace";
 import { useSubscription } from "../hooks/useSubscription";
 import { hasFeature } from "../services/subscription";
 import { FeatureGate } from "../components/subscription/FeatureGate";
 import { sendAssistantMessage, AiUnavailableError } from "../services/ai";
+import { Button } from "../components/ui";
+import { useAppLang } from "../hooks/useAppLang";
+import { t } from "../lib/i18n";
 
-const EXAMPLE_QUESTIONS = [
-  "What appointments are scheduled today?",
-  "Which clients have not returned recently?",
-  "Summarize this client's history.",
-  "Which services are currently inactive?",
-  "What happened during the client's latest visit?",
+// Design migration (full-product-design-migration): fully re-skinned onto
+// beautyroute-ds. Every data hook, effect, and piece of state below is
+// byte-for-byte the same as before; only markup/styling changed.
+
+// Localization (design-refinement pass): example-question copy now lives in
+// lib/i18n.js (ai.exampleQuestion.*) so it can be shown in either language;
+// this array is now built inside the component from t(), not a static
+// English-only module constant.
+const EXAMPLE_QUESTION_KEYS = [
+  "ai.exampleQuestion.today",
+  "ai.exampleQuestion.notReturned",
+  "ai.exampleQuestion.summarize",
+  "ai.exampleQuestion.inactiveServices",
+  "ai.exampleQuestion.lastVisit",
 ];
 
 export default function AIEngine() {
+  const navigate = useNavigate();
+  const { lang } = useAppLang();
   const { workspace, workspaceId, loading: workspaceLoading } = useCurrentWorkspace();
   const { subscription, loading: subLoading } = useSubscription(workspaceId);
+  const EXAMPLE_QUESTIONS = EXAMPLE_QUESTION_KEYS.map((key) => t(key, lang));
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -41,7 +56,7 @@ export default function AIEngine() {
       const { text: reply } = await sendAssistantMessage(workspaceId, trimmed, history);
       setMessages((m) => [...m, { role: "assistant", text: reply }]);
     } catch (err) {
-      setError(err instanceof AiUnavailableError ? err : new AiUnavailableError("unknown", "Something went wrong. Please try again."));
+      setError(err instanceof AiUnavailableError ? err : new AiUnavailableError("unknown", t("ai.genericError", lang)));
     } finally {
       setSending(false);
     }
@@ -51,65 +66,106 @@ export default function AIEngine() {
   const gated = !isLoading && !hasFeature(subscription, "ai");
 
   return (
-    <Layout
-      title="AI Assistant"
-      subtitle="Ask about your workspace — appointments, clients, and services. Grounded in your real data, never invented."
-    >
-      {isLoading && <p className="text-muted text-sm">Loading…</p>}
+    <Layout title={t("ai.title", lang)} subtitle={t("ai.subtitle", lang)}>
+      {isLoading && <p style={{ color: "var(--text-tertiary)", fontSize: 14 }}>{t("ai.loading", lang)}</p>}
 
+      {/* Composition pass: this was previously just descriptive text with no
+          actual path forward -- an "upgrade wall" in the least useful sense.
+          It now explains what the feature actually does (reusing the real
+          EXAMPLE_QUESTIONS list, not invented copy) and gives a real CTA to
+          /pricing, matching TrialBanner's existing "View plans" pattern.
+          hasFeature()/FeatureGate gating logic is untouched -- this is
+          presentation only. */}
       {gated && (
-        <div className="rounded-2xl border border-line bg-surface p-8 text-center">
-          <Sparkles size={22} className="text-gold mx-auto mb-3" />
-          <h2 className="font-display text-xl text-ivory mb-2">AI Assistant is a Professional feature</h2>
-          <p className="text-muted text-sm max-w-md mx-auto">
-            Upgrade your plan to ask the AI assistant about your appointments, clients, and services.
-          </p>
+        <div style={{ borderRadius: "var(--radius-xl)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", padding: "var(--space-8) var(--space-6)" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", maxWidth: 460, margin: "0 auto" }}>
+            <span style={{ height: 44, width: 44, borderRadius: "50%", background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
+              <Lock size={18} color="var(--accent-gold-strong)" />
+            </span>
+            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h2)", color: "var(--text-primary)", margin: "0 0 8px" }}>{t("ai.gatedTitle", lang)}</h2>
+            <p style={{ color: "var(--text-tertiary)", fontSize: 14, margin: "0 0 20px" }}>
+              {t("ai.gatedDescription", lang)}
+            </p>
+            <Button variant="gold" onClick={() => navigate("/pricing")}>{t("ai.viewPlans", lang)}</Button>
+          </div>
+
+          <div style={{ borderTop: "1px solid var(--border-subtle)", marginTop: 28, paddingTop: 20, display: "grid", gap: 8, maxWidth: 420, marginLeft: "auto", marginRight: "auto" }}>
+            <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-overline)", color: "var(--text-tertiary)", margin: "0 0 4px", textAlign: "center" }}>{t("ai.whatYoullAsk", lang)}</p>
+            {EXAMPLE_QUESTIONS.slice(0, 3).map((q) => (
+              <div key={q} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "var(--text-secondary)" }}>
+                <Sparkles size={13} color="var(--accent-gold-strong)" style={{ flexShrink: 0 }} />
+                {q}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
       {!isLoading && !gated && (
         <FeatureGate subscription={subscription} feature="ai">
-          <div className="flex flex-col rounded-3xl border border-line bg-surface overflow-hidden" style={{ height: "min(70vh, 640px)" }}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-line bg-surface-2">
-              <div className="flex items-center gap-2.5">
-                <span className="h-8 w-8 rounded-full bg-wine flex items-center justify-center">
-                  <Sparkles size={14} className="text-onaccent" />
+          <div style={{ display: "flex", flexDirection: "column", borderRadius: "var(--radius-xl)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", overflow: "hidden", height: "min(70vh, 640px)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px var(--space-6)", borderBottom: "1px solid var(--border-subtle)", background: "var(--bg-sunken)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ height: 32, width: 32, borderRadius: "50%", background: "var(--accent-gold)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Sparkles size={14} color="var(--charcoal-900)" />
                 </span>
                 <div>
-                  <p className="text-sm font-medium text-ivory leading-tight">Workspace Assistant</p>
-                  <p className="text-[11px] text-muted leading-tight">{workspace?.display_brand || workspace?.name || "No workspace selected"}</p>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: "var(--text-primary)", lineHeight: 1.2 }}>{t("ai.workspaceAssistant", lang)}</p>
+                  <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-tertiary)", lineHeight: 1.2 }}>{workspace?.display_brand || workspace?.name || t("ai.noWorkspaceSelected", lang)}</p>
                 </div>
               </div>
             </div>
 
-            <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-5 space-y-3">
+            <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "var(--space-5) var(--space-6)", display: "flex", flexDirection: "column", gap: 12 }}>
               {messages.length === 0 && !error && (
                 <div>
-                  <p className="text-muted text-sm mb-3">Try asking:</p>
-                  <div className="space-y-2">
+                  <p style={{ color: "var(--text-tertiary)", fontSize: 14, margin: "0 0 12px" }}>{t("ai.tryAsking", lang)}</p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {EXAMPLE_QUESTIONS.map((q) => (
                       <button
                         key={q}
                         onClick={() => send(q)}
-                        className="w-full flex items-center gap-2.5 text-left text-[13px] text-ivory border border-line rounded-xl px-3.5 py-2.5 hover:border-wine/50 hover:bg-surface-2 transition-colors"
+                        style={{
+                          width: "100%",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          textAlign: "left",
+                          fontSize: 13,
+                          color: "var(--text-primary)",
+                          border: "1px solid var(--border-subtle)",
+                          borderRadius: "var(--radius-md)",
+                          padding: "10px 14px",
+                          background: "transparent",
+                          cursor: "pointer",
+                          fontFamily: "var(--font-body)",
+                        }}
                       >
-                        <Sparkles size={13} className="text-wine shrink-0" />
+                        <Sparkles size={13} color="var(--accent-gold-strong)" style={{ flexShrink: 0 }} />
                         {q}
                       </button>
                     ))}
                   </div>
-                  <p className="text-muted text-xs mt-4">
-                    I can only answer questions about data already in BeautyRoute — I can't take actions like booking or messaging clients.
+                  <p style={{ color: "var(--text-tertiary)", fontSize: 12, marginTop: 16 }}>
+                    {t("ai.disclaimer", lang)}
                   </p>
                 </div>
               )}
 
               {messages.map((m, i) => (
-                <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
                   <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap ${
-                      m.role === "user" ? "bg-wine text-onaccent" : "bg-surface-2 text-ivory border border-line"
-                    }`}
+                    style={{
+                      maxWidth: "85%",
+                      borderRadius: "var(--radius-lg)",
+                      padding: "10px 16px",
+                      fontSize: 13,
+                      lineHeight: "var(--lh-body)",
+                      whiteSpace: "pre-wrap",
+                      background: m.role === "user" ? "var(--accent-gold)" : "var(--bg-sunken)",
+                      color: m.role === "user" ? "var(--charcoal-900)" : "var(--text-primary)",
+                      border: m.role === "user" ? "none" : "1px solid var(--border-subtle)",
+                    }}
                   >
                     {m.text}
                   </div>
@@ -117,14 +173,14 @@ export default function AIEngine() {
               ))}
 
               {sending && (
-                <div className="flex justify-start">
-                  <div className="bg-surface-2 text-muted border border-line rounded-2xl px-4 py-2.5 text-[13px]">Thinking…</div>
+                <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                  <div style={{ background: "var(--bg-sunken)", color: "var(--text-tertiary)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-lg)", padding: "10px 16px", fontSize: 13 }}>{t("ai.thinking", lang)}</div>
                 </div>
               )}
 
               {error && (
-                <div className="flex items-start gap-2 rounded-xl border border-danger/40 bg-danger/5 px-4 py-3 text-[13px] text-danger">
-                  <ShieldAlert size={15} className="shrink-0 mt-0.5" />
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 8, borderRadius: "var(--radius-md)", border: "1px solid var(--error-fg)", background: "var(--error-bg)", padding: "10px 14px", fontSize: 13, color: "var(--error-fg)" }}>
+                  <ShieldAlert size={15} style={{ flexShrink: 0, marginTop: 2 }} />
                   <span>{error.message}</span>
                 </div>
               )}
@@ -135,20 +191,45 @@ export default function AIEngine() {
                 e.preventDefault();
                 send(input);
               }}
-              className="border-t border-line p-4 flex items-center gap-2.5"
+              style={{ borderTop: "1px solid var(--border-subtle)", padding: "var(--space-4)", display: "flex", alignItems: "center", gap: 10 }}
             >
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask about your appointments, clients, or services…"
+                placeholder={t("ai.messagePlaceholder", lang)}
                 disabled={sending}
-                className="flex-1 bg-surface-2 border border-line rounded-full px-4 py-2.5 text-sm text-ivory placeholder:text-muted outline-none focus:border-wine disabled:opacity-60"
+                aria-label={t("ai.messageLabel", lang)}
+                style={{
+                  flex: 1,
+                  background: "var(--bg-sunken)",
+                  border: "1px solid var(--border-default)",
+                  borderRadius: "var(--radius-pill)",
+                  padding: "11px 18px",
+                  fontSize: 14,
+                  color: "var(--text-primary)",
+                  fontFamily: "var(--font-body)",
+                  outline: "none",
+                  opacity: sending ? 0.6 : 1,
+                }}
               />
               <button
                 type="submit"
                 disabled={sending || !input.trim()}
-                className="h-10 w-10 rounded-full bg-wine text-onaccent flex items-center justify-center shrink-0 disabled:opacity-50"
-                aria-label="Send"
+                aria-label={t("ai.send", lang)}
+                style={{
+                  height: 40,
+                  width: 40,
+                  borderRadius: "50%",
+                  background: "var(--accent-gold)",
+                  color: "var(--charcoal-900)",
+                  border: "none",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                  cursor: sending || !input.trim() ? "not-allowed" : "pointer",
+                  opacity: sending || !input.trim() ? 0.5 : 1,
+                }}
               >
                 <Send size={15} />
               </button>
@@ -158,8 +239,8 @@ export default function AIEngine() {
       )}
 
       {!isLoading && !gated && (
-        <p className="text-muted text-xs mt-4">
-          Responses are AI-generated from your workspace data and may be incomplete or wrong — always review before relying on them or sharing with a client.
+        <p style={{ color: "var(--text-tertiary)", fontSize: 12, marginTop: 16 }}>
+          {t("ai.footerDisclaimer", lang)}
         </p>
       )}
     </Layout>

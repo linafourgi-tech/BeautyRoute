@@ -11,7 +11,10 @@ function dialogButton(titleText, buttonName) {
   return within(dialogCard).getByRole("button", { name: buttonName });
 }
 
+const useSessionMock = vi.fn();
+const useWorkspaceContextMock = vi.fn();
 const useCurrentWorkspaceMock = vi.fn();
+const useSubscriptionMock = vi.fn();
 const getServicesMock = vi.fn();
 const createServiceMock = vi.fn();
 const updateServiceMock = vi.fn();
@@ -19,7 +22,14 @@ const deleteServiceMock = vi.fn();
 const importServiceTemplatesMock = vi.fn();
 const getServiceTemplatesMock = vi.fn();
 
+// Design migration (full-product-design-migration): Services now renders
+// through <Layout>, which renders <Sidebar> + <TrialBanner> -- both
+// independently resolve session/workspace/subscription state. Same full
+// mock set as every other Layout-wrapped page test.
+vi.mock("../hooks/useSession", () => ({ useSession: () => useSessionMock() }));
+vi.mock("../contexts/useWorkspaceContext", () => ({ useWorkspaceContext: () => useWorkspaceContextMock() }));
 vi.mock("../hooks/useCurrentWorkspace", () => ({ useCurrentWorkspace: () => useCurrentWorkspaceMock() }));
+vi.mock("../hooks/useSubscription", () => ({ useSubscription: () => useSubscriptionMock() }));
 vi.mock("../services/services", () => ({
   getServices: (...a) => getServicesMock(...a),
   createService: (...a) => createServiceMock(...a),
@@ -48,21 +58,31 @@ function renderServices() {
 
 describe("Services page", () => {
   beforeEach(() => {
+    useSessionMock.mockReset();
+    useWorkspaceContextMock.mockReset();
     useCurrentWorkspaceMock.mockReset();
+    useSubscriptionMock.mockReset();
     getServicesMock.mockReset();
     createServiceMock.mockReset();
     updateServiceMock.mockReset();
     deleteServiceMock.mockReset();
     importServiceTemplatesMock.mockReset();
     getServiceTemplatesMock.mockReset();
+
+    useSessionMock.mockReturnValue({ user: { id: "u1" }, profile: { full_name: "Sara Al-Otaibi" }, loading: false });
+    useWorkspaceContextMock.mockReturnValue({ workspaces: [], workspace: null, workspaceId: "ws-1", selectWorkspace: vi.fn(), loading: false, error: null });
     useCurrentWorkspaceMock.mockReturnValue({ workspaceId: "ws-1", loading: false, error: null, refresh: vi.fn() });
+    useSubscriptionMock.mockReturnValue({ subscription: { subscription_status: "active" }, loading: false });
   });
 
   it("shows loading, then renders services grouped by category", async () => {
     getServicesMock.mockResolvedValue(SERVICES);
     renderServices();
 
-    expect(screen.getByText("Services")).toBeInTheDocument();
+    // getByRole("heading"), not getByText -- Sidebar (rendered via Layout as
+    // of the full-product-design-migration) has its own "Services" nav link
+    // with the same text, so a plain text query is now ambiguous.
+    expect(screen.getByRole("heading", { name: "Services" })).toBeInTheDocument();
     expect(await screen.findByText("Haircut")).toBeInTheDocument();
     expect(screen.getByText("Root Touch-Up")).toBeInTheDocument();
     expect(screen.getByText("haircut")).toBeInTheDocument();

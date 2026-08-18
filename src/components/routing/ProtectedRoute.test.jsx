@@ -44,7 +44,7 @@ describe("ProtectedRoute", () => {
     useSubscriptionMock.mockReturnValue({ subscription: null, loading: false });
 
     renderProtected();
-    expect(screen.getByText("Loading…")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Loading" })).toBeInTheDocument();
     expect(screen.queryByText("Login page")).not.toBeInTheDocument();
   });
 
@@ -72,7 +72,7 @@ describe("ProtectedRoute", () => {
     useSubscriptionMock.mockReturnValue({ subscription: null, loading: false });
 
     renderProtected();
-    expect(screen.getByText("Loading…")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Loading" })).toBeInTheDocument();
   });
 
   it("renders UpgradeRequired instead of the gated content when the subscription is expired", () => {

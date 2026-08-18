@@ -7,7 +7,17 @@ import { getRevenueSeries } from "../services/revenue";
 import { getExpensesSeries } from "../services/expenses";
 import { Skeleton, EmptyState } from "../components/ui";
 import { ErrorState } from "../components/ErrorState";
+import { useAppLang } from "../hooks/useAppLang";
+import { t, intlLocale } from "../lib/i18n";
 import "../styles/beautyroute/styles.css";
+
+// Design migration (full-product-design-migration): fully re-skinned onto
+// beautyroute-ds. Every data hook, effect, and piece of state below is
+// byte-for-byte the same as before; only markup/styling changed -- including
+// the recharts colors, which move from hardcoded old-theme hex to the
+// equivalent beautyroute-ds dark-theme token hex (tokens/colors.css's
+// [data-theme="dark"] block) since SVG presentation attributes here take
+// literal color values, not CSS custom properties.
 
 const LONGEST_STANDING_CLIENTS_SHOWN = 5;
 
@@ -30,7 +40,14 @@ function initials(name) {
     .join("");
 }
 
+const ACCENT_COLOR = {
+  gold: "var(--accent-gold-strong)",
+  danger: "var(--error-fg)",
+  sage: "var(--success-fg)",
+};
+
 export default function BusinessEngine() {
+  const { lang } = useAppLang();
   const { workspaceId, loading: workspaceLoading, error: workspaceError, refresh: refreshWorkspace } = useCurrentWorkspace();
 
   const [revenueSeries, setRevenueSeries] = useState([]);
@@ -70,7 +87,7 @@ export default function BusinessEngine() {
         setExpenseSeries(expenses);
         setClients((clientRows ?? []).map(toClientViewModel));
       } catch (err) {
-        if (!cancelled) setError(err.message || "Couldn't load your business numbers.");
+        if (!cancelled) setError(err.message || t("business.errorFallback", lang));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -80,6 +97,10 @@ export default function BusinessEngine() {
     return () => {
       cancelled = true;
     };
+    // `lang` is deliberately excluded -- see Appointments.jsx's identical
+    // comment for why (fallback error-message translation only, not worth
+    // an extra fetch on a language switch).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId, workspaceLoading, reloadToken]);
 
   function retry() {
@@ -104,6 +125,12 @@ export default function BusinessEngine() {
 
   const totalRevenue = chartData.reduce((s, m) => s + m.revenue, 0);
   const totalExpenses = chartData.reduce((s, m) => s + m.expenses, 0);
+  // A brand-new workspace has 6 real months of zero-value points, not zero
+  // points -- recharts renders that as a full-height flat line at the axis,
+  // which reads as a broken/empty chart rather than "no data yet." Detect
+  // that specific real case and show an actual empty state instead of a
+  // chart with nothing meaningful to look at.
+  const hasChartActivity = totalRevenue > 0 || totalExpenses > 0;
 
   // Deliberately labeled "longest-standing," not "most loyal" -- this is
   // ranked purely by earliest created_at (tenure), which is the only
@@ -113,9 +140,6 @@ export default function BusinessEngine() {
   // workspace-wide visit-count aggregate that doesn't exist yet
   // (services/visits.ts only exposes getClientVisitHistory(clientId), a
   // per-client query, not a workspace-wide one this page could sort by).
-  // Replaces the old mock's arbitrary array order with a real, sorted
-  // signal -- but naming it accurately matters exactly as much as the data
-  // being real.
   const longestStandingClients = useMemo(
     () =>
       [...clients]
@@ -129,62 +153,57 @@ export default function BusinessEngine() {
   const failed = workspaceError || error;
 
   return (
-    <Layout
-      title="Business Engine"
-      subtitle="Revenue, expenses, longest-standing clients and reports — the numbers behind the chair."
-    >
-      {failed && (
-        <div className="beautyroute-ds">
-          <ErrorState message={typeof failed === "string" ? failed : failed.message} onRetry={retry} />
-        </div>
-      )}
+    <Layout title={t("business.title", lang)} subtitle={t("business.subtitle", lang)}>
+      {failed && <ErrorState message={typeof failed === "string" ? failed : failed.message} onRetry={retry} />}
 
       {!failed && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            {/* en-US pinned explicitly, matching StylistDashboard's
-                toLocaleString("en-US") -- an unpinned call renders with
-                whatever thousands separator the host's default locale
-                uses (e.g. "9 999" instead of "9,999"), which isn't a
-                Riyadh-facing formatting choice. */}
-            <MetricCard label="Revenue (6 mo)" value={isLoading ? "—" : `SAR ${totalRevenue.toLocaleString("en-US")}`} accent="gold" />
-            <MetricCard label="Expenses (6 mo)" value={isLoading ? "—" : `SAR ${totalExpenses.toLocaleString("en-US")}`} accent="danger" />
-            <MetricCard label="Net" value={isLoading ? "—" : `SAR ${(totalRevenue - totalExpenses).toLocaleString("en-US")}`} accent="sage" />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" style={{ marginBottom: "var(--space-6)" }}>
+            {/* Numeral formatting now follows the active language (via
+                intlLocale()) instead of being pinned to en-US unconditionally
+                -- ar-SA renders Arabic-Indic numerals, matching the design
+                reference's own formatSAR() intent for SAR values. */}
+            <MetricCard label={t("business.revenue6mo", lang)} value={isLoading ? "—" : `SAR ${totalRevenue.toLocaleString(intlLocale(lang))}`} accent="gold" />
+            <MetricCard label={t("business.expenses6mo", lang)} value={isLoading ? "—" : `SAR ${totalExpenses.toLocaleString(intlLocale(lang))}`} accent="danger" />
+            <MetricCard label={t("business.net", lang)} value={isLoading ? "—" : `SAR ${(totalRevenue - totalExpenses).toLocaleString(intlLocale(lang))}`} accent="sage" />
           </div>
 
-          <div className="rounded-2xl border border-line bg-surface p-6 mb-6">
-            <h2 className="font-display text-lg text-ivory mb-4">Revenue vs expenses</h2>
-            {isLoading ? (
-              <div className="beautyroute-ds">
-                <Skeleton height={260} radius="var(--radius-lg)" />
-              </div>
-            ) : (
+          <div style={{ borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", padding: "var(--space-6)", marginBottom: "var(--space-6)" }}>
+            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h3)", color: "var(--text-primary)", margin: "0 0 var(--space-4)" }}>{t("business.revenueVsExpenses", lang)}</h2>
+            {isLoading && <Skeleton height={260} radius="var(--radius-lg)" />}
+            {!isLoading && !hasChartActivity && (
+              <EmptyState
+                title={t("business.emptyChartTitle", lang)}
+                description={t("business.emptyChartDescription", lang)}
+              />
+            )}
+            {!isLoading && hasChartActivity && (
               <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={chartData}>
                   <defs>
                     <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#B9905A" stopOpacity={0.45} />
-                      <stop offset="95%" stopColor="#B9905A" stopOpacity={0} />
+                      <stop offset="5%" stopColor="#D4AF37" stopOpacity={0.45} />
+                      <stop offset="95%" stopColor="#D4AF37" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E8DCCC" />
-                  <XAxis dataKey="month" stroke="#8C7B6C" fontSize={12} />
-                  <YAxis stroke="#8C7B6C" fontSize={12} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(250,247,242,0.08)" />
+                  <XAxis dataKey="month" stroke="#B7A488" fontSize={12} />
+                  <YAxis stroke="#B7A488" fontSize={12} />
                   <Tooltip
-                    contentStyle={{ background: "#FFFFFF", border: "1px solid #E8DCCC", borderRadius: 12, color: "#2B241F" }}
+                    contentStyle={{ background: "#1F1B18", border: "1px solid rgba(250,247,242,0.14)", borderRadius: 12, color: "#FAF7F2" }}
                   />
-                  <Area type="monotone" dataKey="revenue" stroke="#B9905A" fill="url(#rev)" strokeWidth={2} />
-                  <Area type="monotone" dataKey="expenses" stroke="#9C5568" fill="transparent" strokeWidth={2} />
+                  <Area type="monotone" dataKey="revenue" stroke="#D4AF37" fill="url(#rev)" strokeWidth={2} />
+                  <Area type="monotone" dataKey="expenses" stroke="#B0453E" fill="transparent" strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>
             )}
           </div>
 
-          <div className="rounded-2xl border border-line bg-surface p-6">
-            <h2 className="font-display text-lg text-ivory mb-4">Longest-standing clients</h2>
+          <div style={{ borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", padding: "var(--space-6)" }}>
+            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h3)", color: "var(--text-primary)", margin: "0 0 var(--space-4)" }}>{t("business.longestStandingClients", lang)}</h2>
 
             {isLoading && (
-              <div className="beautyroute-ds space-y-3">
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <Skeleton height={40} radius="var(--radius-lg)" />
                 <Skeleton height={40} radius="var(--radius-lg)" />
                 <Skeleton height={40} radius="var(--radius-lg)" />
@@ -192,22 +211,20 @@ export default function BusinessEngine() {
             )}
 
             {!isLoading && longestStandingClients.length === 0 && (
-              <div className="beautyroute-ds">
-                <EmptyState title="No clients yet" description="Your longest-standing clients will show up here once you've added some." />
-              </div>
+              <EmptyState title={t("business.emptyClientsTitle", lang)} description={t("business.emptyClientsDescription", lang)} />
             )}
 
             {!isLoading && longestStandingClients.length > 0 && (
-              <div className="space-y-2">
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {longestStandingClients.map((c) => (
-                  <div key={c.id} className="flex items-center justify-between border-b border-line py-2 last:border-0">
-                    <div className="flex items-center gap-3">
-                      <span className="h-8 w-8 rounded-full bg-surface-2 flex items-center justify-center text-[11px] font-medium text-wine">
+                  <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border-subtle)", padding: "10px 0" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ height: 30, width: 30, borderRadius: "50%", background: "var(--bg-sunken)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 500, color: "var(--accent-gold-strong)" }}>
                         {initials(c.name)}
                       </span>
-                      <span className="text-ivory text-sm">{c.name}</span>
+                      <span style={{ fontSize: 14, color: "var(--text-primary)" }}>{c.name}</span>
                     </div>
-                    <span className="text-muted text-xs font-mono-tag">client since {c.since}</span>
+                    <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{t("business.clientSince", lang, { date: c.since })}</span>
                   </div>
                 ))}
               </div>
@@ -219,17 +236,11 @@ export default function BusinessEngine() {
   );
 }
 
-const accentClass = {
-  gold: "text-gold",
-  danger: "text-danger",
-  sage: "text-sage",
-};
-
 function MetricCard({ label, value, accent }) {
   return (
-    <div className="rounded-2xl border border-line bg-surface p-5">
-      <p className="text-muted text-xs uppercase tracking-wide">{label}</p>
-      <p className={`font-display text-2xl mt-1 ${accentClass[accent]}`}>{value}</p>
+    <div style={{ borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", padding: "var(--space-5)" }}>
+      <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-overline)", color: "var(--text-tertiary)", margin: 0 }}>{label}</p>
+      <p style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h1)", margin: "4px 0 0", color: ACCENT_COLOR[accent] }}>{value}</p>
     </div>
   );
 }

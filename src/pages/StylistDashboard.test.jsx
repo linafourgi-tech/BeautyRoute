@@ -123,7 +123,7 @@ describe("StylistDashboard page", () => {
     renderDashboard();
     await waitFor(() => expect(getClientsMock).toHaveBeenCalled());
 
-    await user.type(screen.getByPlaceholderText(/Search a client's Beauty Passport/), "bayan");
+    await user.type(screen.getByPlaceholderText(/Search clients/), "bayan");
     expect(await screen.findByText("Bayan Saleh")).toBeInTheDocument();
     expect(screen.queryByText("Amira Al-Fahad")).not.toBeInTheDocument();
   });
@@ -155,8 +155,10 @@ describe("StylistDashboard page", () => {
     getMonthlyRevenueMock.mockResolvedValue(revenueSummary(0));
     renderDashboard();
 
-    // With zero appointments, "Est. fuel" also legitimately reads "SAR 0" --
-    // scope to the revenue stat specifically via its own label's sibling.
+    // "SAR 0" alone is ambiguous if another stat could render the same
+    // string -- scope to the revenue stat specifically via its own label's
+    // sibling in the DOM (the StatCard's value <p> immediately precedes its
+    // metric <p>).
     const revenueLabel = await screen.findByText("revenue this month");
     expect(revenueLabel.previousElementSibling).toHaveTextContent("SAR 0");
   });
@@ -182,5 +184,90 @@ describe("StylistDashboard page", () => {
     expect(screen.queryByText(/4\.9/)).not.toBeInTheDocument();
     // The real mocked value for this render must be the one shown.
     expect(screen.getByText("SAR 9,999")).toBeInTheDocument();
+  });
+
+  it("shows the real appointment count as its own stat, not a fabricated number", async () => {
+    getTodaysAppointmentsMock.mockResolvedValue([APPT_ROW(), APPT_ROW({ id: "a2", client_id: "c2", clients: { full_name: "Bayan Saleh" } })]);
+    getClientsMock.mockResolvedValue([]);
+    renderDashboard();
+
+    expect(await screen.findByText("appointments today")).toBeInTheDocument();
+    const label = screen.getByText("appointments today");
+    expect(label.previousElementSibling).toHaveTextContent("2");
+  });
+
+  it("REGRESSION (Phase 2): the never-wired map placeholder and its always-zero travel ministats are gone", async () => {
+    getTodaysAppointmentsMock.mockResolvedValue([APPT_ROW()]);
+    getClientsMock.mockResolvedValue([]);
+    renderDashboard();
+    await screen.findByText(/Amira Al-Fahad/);
+
+    expect(screen.queryByText(/wire up Google Maps/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Stops")).not.toBeInTheDocument();
+    expect(screen.queryByText("Drive time")).not.toBeInTheDocument();
+    expect(screen.queryByText("Est. fuel")).not.toBeInTheDocument();
+  });
+
+  it("still links 'Full map' to the real, unchanged /route page", async () => {
+    getTodaysAppointmentsMock.mockResolvedValue([]);
+    getClientsMock.mockResolvedValue([]);
+    renderDashboard();
+
+    expect(await screen.findByRole("link", { name: /Full map/ })).toHaveAttribute("href", "/route");
+  });
+
+  // Localization fix (design-refinement pass): the Dashboard used to render
+  // in a fixed mix of languages -- "Good to see you" (English) always paired
+  // with "أهلاً بك" (Arabic) regardless of any language selection, while
+  // every OTHER string on the page (stat labels, "Today", "Full map", the
+  // empty state) was English-only with no Arabic version at all. These
+  // tests lock in the real, deterministic contract: exactly one language,
+  // driven by the workspace's locale column, applied to the WHOLE page.
+  describe("localization", () => {
+    it("renders English UI end-to-end, with no Arabic greeting mixed in, when the workspace has no locale set (default)", async () => {
+      getTodaysAppointmentsMock.mockResolvedValue([]);
+      getClientsMock.mockResolvedValue([]);
+      renderDashboard();
+
+      expect(await screen.findByText("Good to see you, Sara")).toBeInTheDocument();
+      expect(screen.getByText("Today")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /Full map/ })).toBeInTheDocument();
+      expect(screen.getByText("No visits scheduled today")).toBeInTheDocument();
+      expect(screen.getByText("Enjoy the quiet — today's bookings will show up here.")).toBeInTheDocument();
+      expect(screen.getByText("appointments today")).toBeInTheDocument();
+      expect(screen.queryByText("أهلاً بك")).not.toBeInTheDocument();
+    });
+
+    it("renders Arabic UI end-to-end, with no leftover English page content, when the workspace's locale is 'ar'", async () => {
+      useCurrentWorkspaceMock.mockReturnValue({ workspaceId: "ws-1", loading: false, error: null, refresh: vi.fn(), workspace: { id: "ws-1", locale: "ar" } });
+      getTodaysAppointmentsMock.mockResolvedValue([]);
+      getClientsMock.mockResolvedValue([]);
+      renderDashboard();
+
+      expect(await screen.findByText("أهلاً بك")).toBeInTheDocument();
+      expect(screen.getByText("اليوم")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /الخريطة الكاملة/ })).toBeInTheDocument();
+      expect(screen.getByText("لا توجد زيارات مجدولة اليوم")).toBeInTheDocument();
+      expect(screen.getByText("استمتعي بالهدوء — ستظهر حجوزات اليوم هنا.")).toBeInTheDocument();
+      expect(screen.getByText("مواعيد اليوم")).toBeInTheDocument();
+      expect(screen.queryByText("Good to see you")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Good to see you,/)).not.toBeInTheDocument();
+      expect(screen.queryByText("Today")).not.toBeInTheDocument();
+      expect(screen.queryByText("No visits scheduled today")).not.toBeInTheDocument();
+      expect(screen.queryByText("appointments today")).not.toBeInTheDocument();
+    });
+
+    it("translates the search placeholder and empty-search message in Arabic mode too, not just the static chrome", async () => {
+      useCurrentWorkspaceMock.mockReturnValue({ workspaceId: "ws-1", loading: false, error: null, refresh: vi.fn(), workspace: { id: "ws-1", locale: "ar" } });
+      getTodaysAppointmentsMock.mockResolvedValue([]);
+      getClientsMock.mockResolvedValue([CLIENT_ROW()]);
+      const user = userEvent.setup();
+      renderDashboard();
+      await waitFor(() => expect(getClientsMock).toHaveBeenCalled());
+
+      const searchInput = screen.getByPlaceholderText("ابحث عن عميلة…");
+      await user.type(searchInput, "zzz-no-match");
+      expect(await screen.findByText('لا توجد عميلة تطابق "zzz-no-match".')).toBeInTheDocument();
+    });
   });
 });

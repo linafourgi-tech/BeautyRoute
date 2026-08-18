@@ -11,13 +11,24 @@ function dialogButton(titleText, buttonName) {
   return within(dialogCard).getByRole("button", { name: buttonName });
 }
 
+const useSessionMock = vi.fn();
+const useWorkspaceContextMock = vi.fn();
 const useCurrentWorkspaceMock = vi.fn();
+const useSubscriptionMock = vi.fn();
 const getClientsMock = vi.fn();
 const createClientMock = vi.fn();
 const updateClientMock = vi.fn();
 const deleteClientMock = vi.fn();
 
+// Design migration (full-product-design-migration): Clients now renders
+// through <Layout>, which renders <Sidebar> + <TrialBanner> -- both
+// independently resolve session/workspace/subscription state. Same full
+// mock set as every other Layout-wrapped page test (see
+// StylistDashboard.test.jsx/BusinessEngine.test.jsx).
+vi.mock("../hooks/useSession", () => ({ useSession: () => useSessionMock() }));
+vi.mock("../contexts/useWorkspaceContext", () => ({ useWorkspaceContext: () => useWorkspaceContextMock() }));
 vi.mock("../hooks/useCurrentWorkspace", () => ({ useCurrentWorkspace: () => useCurrentWorkspaceMock() }));
+vi.mock("../hooks/useSubscription", () => ({ useSubscription: () => useSubscriptionMock() }));
 vi.mock("../services/clients", () => ({
   getClients: (...a) => getClientsMock(...a),
   createClient: (...a) => createClientMock(...a),
@@ -42,19 +53,29 @@ function renderClients() {
 
 describe("Clients page", () => {
   beforeEach(() => {
+    useSessionMock.mockReset();
+    useWorkspaceContextMock.mockReset();
     useCurrentWorkspaceMock.mockReset();
+    useSubscriptionMock.mockReset();
     getClientsMock.mockReset();
     createClientMock.mockReset();
     updateClientMock.mockReset();
     deleteClientMock.mockReset();
+
+    useSessionMock.mockReturnValue({ user: { id: "u1" }, profile: { full_name: "Sara Al-Otaibi" }, loading: false });
+    useWorkspaceContextMock.mockReturnValue({ workspaces: [], workspace: null, workspaceId: "ws-1", selectWorkspace: vi.fn(), loading: false, error: null });
     useCurrentWorkspaceMock.mockReturnValue({ workspaceId: "ws-1", loading: false, error: null, refresh: vi.fn() });
+    useSubscriptionMock.mockReturnValue({ subscription: { subscription_status: "active" }, loading: false });
   });
 
   it("shows loading placeholders while fetching, then renders the client list", async () => {
     getClientsMock.mockResolvedValue(CLIENTS);
     renderClients();
 
-    expect(screen.getByText("Clients")).toBeInTheDocument();
+    // getByRole("heading"), not getByText -- Sidebar (rendered via Layout as
+    // of the full-product-design-migration) has its own "Clients" nav link
+    // with the same text, so a plain text query is now ambiguous.
+    expect(screen.getByRole("heading", { name: "Clients" })).toBeInTheDocument();
     expect(await screen.findByText("Amira Al-Fahad")).toBeInTheDocument();
     expect(screen.getByText("Bayan Saleh")).toBeInTheDocument();
     expect(getClientsMock).toHaveBeenCalledWith("ws-1");
@@ -72,7 +93,7 @@ describe("Clients page", () => {
     renderClients();
     await screen.findByText("Amira Al-Fahad");
 
-    await user.type(screen.getByPlaceholderText("Search by name, phone, or email"), "bayan");
+    await user.type(screen.getByPlaceholderText("Search clients…"), "bayan");
     expect(screen.queryByText("Amira Al-Fahad")).not.toBeInTheDocument();
     expect(screen.getByText("Bayan Saleh")).toBeInTheDocument();
   });
@@ -83,7 +104,7 @@ describe("Clients page", () => {
     renderClients();
     await screen.findByText("Amira Al-Fahad");
 
-    await user.type(screen.getByPlaceholderText("Search by name, phone, or email"), "nobody-like-this");
+    await user.type(screen.getByPlaceholderText("Search clients…"), "nobody-like-this");
     expect(screen.getByText("No clients match your search")).toBeInTheDocument();
   });
 
@@ -184,5 +205,20 @@ describe("Clients page", () => {
     expect(await screen.findByText("This client has appointment or visit history and can't be deleted.")).toBeInTheDocument();
     // The client must still be in the list -- the delete did not silently succeed.
     expect(screen.getByText("Amira Al-Fahad")).toBeInTheDocument();
+  });
+
+  // Localization fix (design-refinement pass): title/subtitle/search
+  // placeholder/empty state/primary action used to be English-only.
+  it("renders in Arabic -- title, subtitle, empty state, and primary action -- when the workspace's locale is 'ar', with no leftover English UI", async () => {
+    useCurrentWorkspaceMock.mockReturnValue({ workspaceId: "ws-1", loading: false, error: null, refresh: vi.fn(), workspace: { id: "ws-1", locale: "ar" } });
+    getClientsMock.mockResolvedValue([]);
+    renderClients();
+
+    expect(await screen.findByRole("heading", { name: "العملاء" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "عميلة جديدة" })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("ابحث عن عميلة…")).toBeInTheDocument();
+    expect(screen.getByText("لا توجد عميلات بعد")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Clients" })).not.toBeInTheDocument();
+    expect(screen.queryByText("No clients yet")).not.toBeInTheDocument();
   });
 });

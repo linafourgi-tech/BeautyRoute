@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { ArrowLeft, Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
+import Layout from "../components/Layout";
 import { useCurrentWorkspace } from "../hooks/useCurrentWorkspace";
 import { getServices, createService, updateService, deleteService, importServiceTemplates } from "../services/services";
 import { getServiceTemplates } from "../services/serviceTemplates";
 import { Button, Input, Select, Switch, Tag, Dialog, Skeleton, EmptyState } from "../components/ui";
 import { ErrorState } from "../components/ErrorState";
+import { useAppLang } from "../hooks/useAppLang";
+import { t, translateEnum } from "../lib/i18n";
 import "../styles/beautyroute/styles.css";
 
 const CATEGORIES = ["consultation", "haircut", "styling", "color", "treatment", "extensions", "bridal", "specialty"];
@@ -13,6 +15,7 @@ const EMPTY_FORM = { name: "", category: "haircut", duration_minutes: "45", pric
 const FK_VIOLATION = "23503";
 
 export default function Services() {
+  const { lang } = useAppLang();
   const { workspaceId, loading: workspaceLoading, error: workspaceError, refresh: refreshWorkspace } = useCurrentWorkspace();
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -54,7 +57,7 @@ export default function Services() {
         const rows = await getServices(workspaceId);
         if (!cancelled) setServices(rows ?? []);
       } catch (err) {
-        if (!cancelled) setError(err.message || "Couldn't load services.");
+        if (!cancelled) setError(err.message || t("services.errorFallback", lang));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -64,6 +67,10 @@ export default function Services() {
     return () => {
       cancelled = true;
     };
+    // `lang` is deliberately excluded -- see Appointments.jsx's identical
+    // comment for why (fallback error-message translation only, not worth
+    // an extra fetch on a language switch).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId, workspaceLoading, reloadToken]);
 
   function retry() {
@@ -97,11 +104,11 @@ export default function Services() {
   }
 
   function validateForm() {
-    if (!form.name.trim()) return "Service name is required.";
+    if (!form.name.trim()) return t("services.validation.name", lang);
     const duration = Number(form.duration_minutes);
-    if (!Number.isFinite(duration) || duration <= 0) return "Duration must be a positive number of minutes.";
+    if (!Number.isFinite(duration) || duration <= 0) return t("services.validation.duration", lang);
     const price = Number(form.price);
-    if (!Number.isFinite(price) || price < 0) return "Price can't be negative.";
+    if (!Number.isFinite(price) || price < 0) return t("services.validation.price", lang);
     return "";
   }
 
@@ -129,7 +136,7 @@ export default function Services() {
       }
       setFormOpen(false);
     } catch (err) {
-      setFormError(err.message || "Couldn't save this service.");
+      setFormError(err.message || t("services.saveErrorFallback", lang));
     } finally {
       setSaving(false);
     }
@@ -137,7 +144,7 @@ export default function Services() {
 
   async function toggleActive(service) {
     const updated = await updateService(service.id, { is_active: !service.is_active }).catch((err) => {
-      setError(err.message || "Couldn't update this service.");
+      setError(err.message || t("services.updateErrorFallback", lang));
       return null;
     });
     if (updated) setServices((prev) => prev.map((s) => (s.id === service.id ? updated : s)));
@@ -153,9 +160,9 @@ export default function Services() {
       setDeleteTarget(null);
     } catch (err) {
       if (err.code === FK_VIOLATION) {
-        setDeleteError("This service has been booked before and can't be deleted -- try disabling it instead.");
+        setDeleteError(t("services.deleteBlocked", lang));
       } else {
-        setDeleteError(err.message || "Couldn't delete this service.");
+        setDeleteError(err.message || t("services.deleteErrorFallback", lang));
       }
     } finally {
       setDeleting(false);
@@ -170,9 +177,9 @@ export default function Services() {
     try {
       const rows = await getServiceTemplates();
       const existingNames = new Set(services.map((s) => s.name));
-      setTemplates((rows ?? []).filter((t) => !existingNames.has(t.name)));
+      setTemplates((rows ?? []).filter((tpl) => !existingNames.has(tpl.name)));
     } catch (err) {
-      setTemplatesError(err.message || "Couldn't load service templates.");
+      setTemplatesError(err.message || t("services.templatesErrorFallback", lang));
     } finally {
       setTemplatesLoading(false);
     }
@@ -191,7 +198,7 @@ export default function Services() {
       setServices(rows ?? []);
       setImportOpen(false);
     } catch (err) {
-      setTemplatesError(err.message || "Couldn't import those templates.");
+      setTemplatesError(err.message || t("services.importErrorFallback", lang));
     } finally {
       setImporting(false);
     }
@@ -201,96 +208,100 @@ export default function Services() {
   const failed = workspaceError || error;
 
   return (
-    <div className="beautyroute-ds" style={{ minHeight: "100vh", background: "var(--bg-page)", fontFamily: "var(--font-body)" }}>
-      <div style={{ maxWidth: 880, margin: "0 auto", padding: "var(--space-10) var(--space-6)" }}>
-        <Link to="/dashboard" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--text-tertiary)", textDecoration: "none", marginBottom: 24 }}>
-          <ArrowLeft size={14} /> Back to dashboard
-        </Link>
-
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, gap: 16, flexWrap: "wrap" }}>
-          <div>
-            <h1 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-display-md)", color: "var(--text-primary)", margin: 0 }}>Services</h1>
-            <p style={{ fontSize: 14, color: "var(--text-tertiary)", margin: "4px 0 0" }}>What you offer, and what it costs.</p>
-          </div>
-          <div style={{ display: "flex", gap: 10 }}>
-            <Button variant="secondary" onClick={openImport}>Import templates</Button>
-            <Button variant="gold" icon={<Plus size={16} />} onClick={openCreate}>New service</Button>
-          </div>
+    <Layout
+      title={t("services.title", lang)}
+      subtitle={isLoading ? t("services.subtitleLoading", lang) : t("services.subtitle", lang, { count: services.length })}
+      headerActions={
+        <div style={{ display: "flex", gap: 10 }}>
+          <Button variant="secondary" onClick={openImport}>{t("services.importTemplates", lang)}</Button>
+          <Button variant="gold" icon={<Plus size={16} />} onClick={openCreate}>{t("services.newService", lang)}</Button>
         </div>
+      }
+    >
+      {failed && <ErrorState message={typeof failed === "string" ? failed : failed.message} onRetry={retry} />}
 
-        {failed && <ErrorState message={typeof failed === "string" ? failed : failed.message} onRetry={retry} />}
+      {!failed && isLoading && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 760 }}>
+          <Skeleton height={56} radius="var(--radius-lg)" />
+          <Skeleton height={56} radius="var(--radius-lg)" />
+        </div>
+      )}
 
-        {!failed && isLoading && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <Skeleton height={56} radius="var(--radius-lg)" />
-            <Skeleton height={56} radius="var(--radius-lg)" />
-          </div>
-        )}
+      {!failed && !isLoading && services.length === 0 && (
+        <EmptyState
+          title={t("services.emptyTitle", lang)}
+          description={t("services.emptyDescription", lang)}
+          action={<Button variant="gold" onClick={openImport}>{t("services.importTemplates", lang)}</Button>}
+        />
+      )}
 
-        {!failed && !isLoading && services.length === 0 && (
-          <EmptyState
-            title="No services yet"
-            description="Create your own, or import from the starter catalog to get going fast."
-            action={<Button variant="gold" onClick={openImport}>Import templates</Button>}
-          />
-        )}
-
-        {!failed && !isLoading && services.length > 0 &&
-          Object.entries(grouped).map(([category, rows]) => (
-            <div key={category} style={{ marginBottom: 24 }}>
-              <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-overline)", color: "var(--text-tertiary)", margin: "0 0 10px" }}>
-                {category}
+      {/* Composition pass: same fix as Clients -- a service row used to
+          stretch across the full page width with justify-content:space-
+          between, which read as an unnecessarily wide, sparse bar whenever
+          a category had few items. Capping the grouped list at a narrower
+          content width keeps it dense regardless of category size. */}
+      {!failed && !isLoading && services.length > 0 && (
+        <div style={{ maxWidth: 760 }}>
+          {Object.entries(grouped).map(([category, rows]) => (
+            <div key={category} style={{ marginBottom: 20 }}>
+              <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-overline)", color: "var(--text-tertiary)", margin: "0 0 8px" }}>
+                {translateEnum("category", category, lang)}
               </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {rows.map((service) => (
                   <div
                     key={service.id}
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 16,
-                      padding: "14px 20px",
+                      gap: 14,
+                      padding: "12px 16px",
                       background: "var(--surface-card)",
                       border: "1px solid var(--border-subtle)",
                       borderRadius: "var(--radius-lg)",
                       opacity: service.is_active ? 1 : 0.55,
                     }}
                   >
-                    <div style={{ minWidth: 0 }}>
-                      <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>{service.name}</p>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{service.name}</p>
                       <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--text-tertiary)" }}>
-                        {service.duration_minutes} min · SAR {service.price}
+                        {t("services.durationPrice", lang, { duration: service.duration_minutes, price: service.price })}
                       </p>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
-                      <Switch checked={service.is_active} onChange={() => toggleActive(service)} label="Active" />
-                      <Button variant="secondary" size="sm" icon={<Pencil size={13} />} onClick={() => openEdit(service)}>Edit</Button>
-                      <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => { setDeleteTarget(service); setDeleteError(""); }}>Delete</Button>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+                      <Switch checked={service.is_active} onChange={() => toggleActive(service)} label={t("services.active", lang)} />
+                      <Button variant="secondary" size="sm" icon={<Pencil size={13} />} onClick={() => openEdit(service)}>{t("action.edit", lang)}</Button>
+                      <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => { setDeleteTarget(service); setDeleteError(""); }}>{t("action.delete", lang)}</Button>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
           ))}
-      </div>
+        </div>
+      )}
 
       <Dialog
         open={formOpen}
         onClose={() => !saving && setFormOpen(false)}
-        title={editingId ? "Edit service" : "New service"}
+        title={editingId ? t("services.editService", lang) : t("services.newServiceTitle", lang)}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setFormOpen(false)} disabled={saving}>Cancel</Button>
-            <Button variant="gold" onClick={handleSave} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
+            <Button variant="secondary" onClick={() => setFormOpen(false)} disabled={saving}>{t("action.cancel", lang)}</Button>
+            <Button variant="gold" onClick={handleSave} disabled={saving}>{saving ? t("action.saving", lang) : t("action.save", lang)}</Button>
           </>
         }
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <Input label="Service name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <Select label="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} options={CATEGORIES} />
-          <Input label="Duration (minutes)" type="number" value={form.duration_minutes} onChange={(e) => setForm({ ...form, duration_minutes: e.target.value })} />
-          <Input label="Price (SAR)" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+          <Input label={t("services.serviceName", lang)} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <Select
+            label={t("services.category", lang)}
+            value={form.category}
+            onChange={(e) => setForm({ ...form, category: e.target.value })}
+            options={CATEGORIES.map((cat) => ({ value: cat, label: translateEnum("category", cat, lang) }))}
+          />
+          <Input label={t("services.durationMinutes", lang)} type="number" value={form.duration_minutes} onChange={(e) => setForm({ ...form, duration_minutes: e.target.value })} />
+          <Input label={t("services.priceSAR", lang)} type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
           {formError && <p style={{ margin: 0, fontSize: 13, color: "var(--error-fg)" }}>{formError}</p>}
         </div>
       </Dialog>
@@ -298,16 +309,16 @@ export default function Services() {
       <Dialog
         open={!!deleteTarget}
         onClose={() => !deleting && setDeleteTarget(null)}
-        title="Delete service?"
+        title={t("services.deleteTitle", lang)}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancel</Button>
-            <Button variant="gold" onClick={handleDelete} disabled={deleting}>{deleting ? "Deleting…" : "Delete"}</Button>
+            <Button variant="secondary" onClick={() => setDeleteTarget(null)} disabled={deleting}>{t("action.cancel", lang)}</Button>
+            <Button variant="gold" onClick={handleDelete} disabled={deleting}>{deleting ? t("action.deleting", lang) : t("action.delete", lang)}</Button>
           </>
         }
       >
         <p style={{ margin: 0 }}>
-          {deleteTarget && `This will permanently remove "${deleteTarget.name}". This can't be undone.`}
+          {deleteTarget && t("services.deleteBody", lang, { name: deleteTarget.name })}
         </p>
         {deleteError && <p style={{ margin: "10px 0 0", fontSize: 13, color: "var(--error-fg)" }}>{deleteError}</p>}
       </Dialog>
@@ -315,12 +326,12 @@ export default function Services() {
       <Dialog
         open={importOpen}
         onClose={() => !importing && setImportOpen(false)}
-        title="Import service templates"
+        title={t("services.importTitle", lang)}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setImportOpen(false)} disabled={importing}>Cancel</Button>
+            <Button variant="secondary" onClick={() => setImportOpen(false)} disabled={importing}>{t("action.cancel", lang)}</Button>
             <Button variant="gold" onClick={handleImport} disabled={importing || selectedTemplateIds.length === 0}>
-              {importing ? "Importing…" : `Import ${selectedTemplateIds.length || ""}`.trim()}
+              {importing ? t("services.importing", lang) : t("services.import", lang, { count: selectedTemplateIds.length || "" })}
             </Button>
           </>
         }
@@ -328,18 +339,18 @@ export default function Services() {
         {templatesLoading && <Skeleton height={120} />}
         {!templatesLoading && templatesError && <p style={{ fontSize: 13, color: "var(--error-fg)" }}>{templatesError}</p>}
         {!templatesLoading && !templatesError && templates.length === 0 && (
-          <p style={{ margin: 0, fontSize: 13, color: "var(--text-tertiary)" }}>You've already added every starter template.</p>
+          <p style={{ margin: 0, fontSize: 13, color: "var(--text-tertiary)" }}>{t("services.allTemplatesAdded", lang)}</p>
         )}
         {!templatesLoading && !templatesError && templates.length > 0 && (
           <div style={{ maxHeight: 320, overflowY: "auto", display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {templates.map((t) => (
-              <Tag key={t.id} selected={selectedTemplateIds.includes(t.id)} onClick={() => toggleTemplate(t.id)}>
-                {t.name}
+            {templates.map((tpl) => (
+              <Tag key={tpl.id} selected={selectedTemplateIds.includes(tpl.id)} onClick={() => toggleTemplate(tpl.id)}>
+                {tpl.name}
               </Tag>
             ))}
           </div>
         )}
       </Dialog>
-    </div>
+    </Layout>
   );
 }

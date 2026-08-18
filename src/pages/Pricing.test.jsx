@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 
 // Plan name (h2) -> name/badge row div -> info wrapper div -> outer card div.
 // closest("div") only reaches the immediate row div, which does NOT contain
@@ -7,6 +8,16 @@ import { render, screen, within } from "@testing-library/react";
 // that actually wraps everything for a given plan.
 function planCard(name) {
   return screen.getByText(name).parentElement.parentElement.parentElement;
+}
+
+// Composition pass: Pricing now has a real "Back to dashboard"/"Sign in"
+// link driven by useNavigate(), which requires a Router in context.
+function renderPricing() {
+  return render(
+    <MemoryRouter>
+      <Pricing />
+    </MemoryRouter>
+  );
 }
 
 const useSessionMock = vi.fn();
@@ -30,7 +41,7 @@ describe("Pricing page", () => {
 
   it("renders all three plan tiers with their display names and prices", () => {
     useSubscriptionMock.mockReturnValue({ subscription: null });
-    render(<Pricing />);
+    renderPricing();
 
     expect(screen.getByText("Starter")).toBeInTheDocument();
     expect(screen.getByText("Professional")).toBeInTheDocument();
@@ -42,7 +53,7 @@ describe("Pricing page", () => {
 
   it("marks the workspace's current plan with a 'Current plan' badge, and only that one", () => {
     useSubscriptionMock.mockReturnValue({ subscription: { plan_tier: "Pro", subscription_status: "active" } });
-    render(<Pricing />);
+    renderPricing();
 
     expect(within(planCard("Professional")).getByText("Current plan")).toBeInTheDocument();
     // Exactly one "Current plan" badge across the whole page.
@@ -51,7 +62,7 @@ describe("Pricing page", () => {
 
   it("shows no 'Current plan' badge when there is no subscription yet", () => {
     useSubscriptionMock.mockReturnValue({ subscription: null });
-    render(<Pricing />);
+    renderPricing();
     expect(screen.queryByText("Current plan")).not.toBeInTheDocument();
   });
 
@@ -60,20 +71,20 @@ describe("Pricing page", () => {
     useSubscriptionMock.mockReturnValue({
       subscription: { plan_tier: "Starter", subscription_status: "trial", trial_ends_at: in4Days },
     });
-    render(<Pricing />);
+    renderPricing();
     expect(screen.getByText(/You're on a free trial/)).toBeInTheDocument();
     expect(screen.getByText(/4 days left/)).toBeInTheDocument();
   });
 
   it("does not show trial messaging for a non-trial subscription", () => {
     useSubscriptionMock.mockReturnValue({ subscription: { plan_tier: "Pro", subscription_status: "active" } });
-    render(<Pricing />);
+    renderPricing();
     expect(screen.queryByText(/free trial/)).not.toBeInTheDocument();
   });
 
   it("every plan's action button is disabled and labeled 'Coming Soon' -- no purchase/payment workflow is implemented or implied", () => {
     useSubscriptionMock.mockReturnValue({ subscription: null });
-    render(<Pricing />);
+    renderPricing();
 
     const buttons = screen.getAllByRole("button", { name: "Coming Soon" });
     expect(buttons).toHaveLength(3);
@@ -85,7 +96,7 @@ describe("Pricing page", () => {
 
   it("reflects each plan's real feature set from src/lib/plans.js (e.g. Starter shows every feature as denied/dim)", () => {
     useSubscriptionMock.mockReturnValue({ subscription: null });
-    render(<Pricing />);
+    renderPricing();
 
     expect(within(planCard("Starter")).getByText("AI consultation & recommendations")).toBeInTheDocument();
     expect(within(planCard("Starter")).getByText("Staff & team management")).toBeInTheDocument();

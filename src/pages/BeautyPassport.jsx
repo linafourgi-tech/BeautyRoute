@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { AlertTriangle, Phone, Mail, Plus, X, ChevronDown, ChevronUp, Image as ImageIcon, Sparkles, Copy, Check } from "lucide-react";
+import { AlertTriangle, Phone, Mail, Plus, ChevronDown, ChevronUp, Image as ImageIcon, Sparkles, Copy, Check, Search } from "lucide-react";
 import Layout from "../components/Layout";
 import { useCurrentWorkspace } from "../hooks/useCurrentWorkspace";
 import { useSession } from "../hooks/useSession";
@@ -11,6 +11,16 @@ import { getAppointmentsByClient } from "../services/appointments";
 import { getClientVisitHistory, createVisitLog, updateVisitLog } from "../services/visits";
 import { getFilesForEntity, createFile } from "../services/files";
 import { generateClientSummary, generateNextVisitRecommendation, generateAftercareInstructions, AiUnavailableError } from "../services/ai";
+import { Button, Input, Select, Dialog } from "../components/ui";
+import { useAppLang } from "../hooks/useAppLang";
+import { t, translateEnum, intlLocale } from "../lib/i18n";
+
+// Design migration (full-product-design-migration): fully re-skinned onto
+// beautyroute-ds, replacing the hand-built visit-log form and AI-result
+// panel (both previously raw `fixed inset-0` overlays) with the shared
+// Dialog/Input/Select/Button components. Every data hook, effect, handler,
+// and piece of state below is byte-for-byte the same as before; only
+// markup/styling changed.
 
 function initials(name) {
   return (name || "?").split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
@@ -30,6 +40,7 @@ function emptyVisitForm() {
 }
 
 export default function BeautyPassport() {
+  const { lang } = useAppLang();
   const [searchParams, setSearchParams] = useSearchParams();
   const { workspaceId, loading: workspaceLoading } = useCurrentWorkspace();
   const { user } = useSession();
@@ -84,7 +95,7 @@ export default function BeautyPassport() {
           }
         }
       } catch (err) {
-        if (!cancelled) setClientsError(err.message || "Couldn't load clients.");
+        if (!cancelled) setClientsError(err.message || t("passport.clientsErrorFallback", lang));
       } finally {
         if (!cancelled) setClientsLoading(false);
       }
@@ -117,7 +128,7 @@ export default function BeautyPassport() {
         setAppointments(apptRows ?? []);
         setVisits(visitRows ?? []);
       } catch (err) {
-        if (!cancelled) setDetailError(err.message || "Couldn't load this passport.");
+        if (!cancelled) setDetailError(err.message || t("passport.detailErrorFallback", lang));
       } finally {
         if (!cancelled) setDetailLoading(false);
       }
@@ -127,6 +138,10 @@ export default function BeautyPassport() {
     return () => {
       cancelled = true;
     };
+    // `lang` is deliberately excluded -- see Appointments.jsx's identical
+    // comment for why (fallback error-message translation only, not worth
+    // an extra fetch on a language switch).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, reloadToken]);
 
   const filteredClients = useMemo(() => {
@@ -181,7 +196,7 @@ export default function BeautyPassport() {
   async function handleSaveVisit(e) {
     e.preventDefault();
     if (!form.visit_date) {
-      setFormError("Pick a visit date.");
+      setFormError(t("passport.validation.visitDate", lang));
       return;
     }
     setFormError("");
@@ -221,7 +236,7 @@ export default function BeautyPassport() {
       setFormOpen(false);
       refresh();
     } catch (err) {
-      setFormError(err.message || "Couldn't save this visit.");
+      setFormError(err.message || t("passport.saveVisitErrorFallback", lang));
     } finally {
       setSaving(false);
     }
@@ -233,21 +248,21 @@ export default function BeautyPassport() {
       const { text } = await action();
       setAiPanel({ kind, title, warn, loading: false, error: null, text });
     } catch (err) {
-      const message = err instanceof AiUnavailableError ? err.message : "Something went wrong. Please try again.";
+      const message = err instanceof AiUnavailableError ? err.message : t("passport.ai.genericError", lang);
       setAiPanel({ kind, title, warn, loading: false, error: message, text: "" });
     }
   }
 
   function openAiSummary() {
-    runAiAction("summary", "Client summary", false, () => generateClientSummary(workspaceId, client.id));
+    runAiAction("summary", t("passport.ai.summaryTitle", lang), false, () => generateClientSummary(workspaceId, client.id));
   }
 
   function openAiNextVisit() {
-    runAiAction("next_visit", "Next visit suggestion", false, () => generateNextVisitRecommendation(workspaceId, client.id));
+    runAiAction("next_visit", t("passport.ai.nextVisitTitle", lang), false, () => generateNextVisitRecommendation(workspaceId, client.id));
   }
 
   function openAiAftercare(visit) {
-    runAiAction("aftercare", "Aftercare instructions", true, () => generateAftercareInstructions(workspaceId, visit.id));
+    runAiAction("aftercare", t("passport.ai.aftercareTitle", lang), true, () => generateAftercareInstructions(workspaceId, visit.id));
   }
 
   function visitDuration(visit) {
@@ -267,42 +282,52 @@ export default function BeautyPassport() {
 
   return (
     <Layout
-      title="Beauty Passport"
-      titleAr="جواز الجمال"
-      subtitle="Every client's story, remembered — a chronological record of formulas, looks, and notes."
+      title={t("passport.title", lang)}
+      subtitle={t("passport.subtitle", lang)}
     >
-      <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-8">
         {/* Client list */}
         <div>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search clients…"
-            className="w-full bg-surface border border-line rounded-full px-4 py-2.5 text-sm text-ivory placeholder:text-muted outline-none focus:border-wine mb-3"
-          />
+          <div style={{ marginBottom: 12 }}>
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t("passport.searchPlaceholder", lang)}
+              icon={<Search size={15} style={{ color: "var(--text-tertiary)" }} />}
+            />
+          </div>
 
-          {clientsError && <p className="text-xs text-danger">{clientsError}</p>}
-          {isLoading && <p className="text-xs text-muted">Loading clients…</p>}
+          {clientsError && <p style={{ fontSize: 12, color: "var(--error-fg)" }}>{clientsError}</p>}
+          {isLoading && <p style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{t("passport.loadingClients", lang)}</p>}
           {!isLoading && !clientsError && filteredClients.length === 0 && (
-            <p className="text-xs text-muted">No clients yet — add one from the Clients page.</p>
+            <p style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{t("passport.noClientsYet", lang)}</p>
           )}
 
-          <div className="space-y-2.5">
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {!isLoading && filteredClients.map((c) => (
               <button
                 key={c.id}
                 onClick={() => setSearchParams({ client: c.id })}
-                className={`w-full flex items-center gap-3.5 rounded-2xl border px-4 py-3.5 text-left transition-colors ${
-                  selectedId === c.id ? "border-wine bg-surface" : "border-line bg-surface/60 hover:border-muted"
-                }`}
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  borderRadius: "var(--radius-lg)",
+                  border: "1px solid " + (selectedId === c.id ? "var(--accent-gold-strong)" : "var(--border-subtle)"),
+                  background: "var(--surface-card)",
+                  padding: "12px 14px",
+                  textAlign: "left",
+                  cursor: "pointer",
+                }}
               >
-                <div className="h-11 w-11 rounded-full bg-surface-2 border border-line flex items-center justify-center font-display text-wine text-sm shrink-0">
+                <div style={{ height: 38, width: 38, borderRadius: "50%", background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", color: "var(--accent-gold-strong)", fontSize: 13, flexShrink: 0 }}>
                   {initials(c.full_name)}
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-ivory text-sm font-medium truncate">{c.full_name}</p>
-                  <p className="text-muted text-xs truncate mt-0.5">
-                    {c.last_visit_at ? `Last visit ${c.last_visit_at.slice(0, 10)}` : "No visits yet"}
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <p style={{ margin: 0, fontSize: 14, color: "var(--text-primary)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.full_name}</p>
+                  <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {c.last_visit_at ? t("passport.lastVisit", lang, { date: c.last_visit_at.slice(0, 10) }) : t("passport.noVisitsYet", lang)}
                   </p>
                 </div>
               </button>
@@ -312,75 +337,65 @@ export default function BeautyPassport() {
 
         {/* Storybook */}
         {client && (
-          <div className="space-y-8">
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
             {/* Cover */}
-            <div className="rounded-3xl border border-line bg-surface p-8 md:p-10">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-5 sm:gap-6">
-                <div className="h-20 w-20 rounded-full bg-surface-2 border-4 border-surface-2 flex items-center justify-center font-display text-2xl text-wine shrink-0">
+            <div style={{ borderRadius: "var(--radius-xl)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", padding: "var(--space-6)" }}>
+              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 20 }}>
+                <div style={{ height: 76, width: 76, borderRadius: "50%", background: "var(--bg-sunken)", border: "3px solid var(--bg-sunken)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontSize: 26, color: "var(--accent-gold-strong)", flexShrink: 0 }}>
                   {initials(client.full_name)}
                 </div>
-                <div className="flex-1">
-                  <p className="font-mono-tag text-[11px] uppercase tracking-[0.16em] text-gold">Beauty Passport</p>
-                  <h2 className="font-display text-3xl text-ivory mt-1">{client.full_name}</h2>
-                  <p className="text-muted text-sm mt-1">
-                    Client since {new Date(client.created_at).toLocaleDateString("en-GB", { year: "numeric", month: "long" })}
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <p style={{ margin: 0, fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-overline)", color: "var(--accent-gold-strong)" }}>{t("passport.eyebrow", lang)}</p>
+                  <h2 style={{ margin: "4px 0 0", fontFamily: "var(--font-display)", fontSize: "var(--text-h1)", color: "var(--text-primary)" }}>{client.full_name}</h2>
+                  <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--text-tertiary)" }}>
+                    {t("passport.clientSince", lang, { date: new Date(client.created_at).toLocaleDateString(intlLocale(lang), { year: "numeric", month: "long" }) })}
                   </p>
                 </div>
-                <span className="text-[11px] uppercase tracking-wide bg-surface-2 text-wine px-3 py-1.5 rounded-full font-medium self-start sm:self-center">
-                  {client.tier}
+                <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-overline)", background: "var(--bg-sunken)", color: "var(--accent-gold-strong)", padding: "6px 14px", borderRadius: "var(--radius-pill)", fontWeight: 600 }}>
+                  {translateEnum("tier", client.tier, lang)}
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8">
-                <InfoCard icon={Phone} label="Phone" value={client.phone || "Not on file"} />
-                <InfoCard icon={Mail} label="Email" value={client.email || "Not on file"} />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginTop: "var(--space-6)" }}>
+                <InfoCard icon={Phone} label={t("passport.phone", lang)} value={client.phone || t("passport.notOnFile", lang)} />
+                <InfoCard icon={Mail} label={t("passport.email", lang)} value={client.email || t("passport.notOnFile", lang)} />
                 <InfoCard
                   icon={AlertTriangle}
-                  label="Allergies"
-                  value={client.allergies?.length ? client.allergies.join(", ") : "None on file"}
+                  label={t("passport.allergies", lang)}
+                  value={client.allergies?.length ? client.allergies.join(", ") : t("passport.noneOnFile", lang)}
                   warn={client.allergies?.length > 0}
                 />
-                <InfoCard icon={ImageIcon} label="Notes" value={client.internal_notes || "No internal notes"} />
+                <InfoCard icon={ImageIcon} label={t("passport.notes", lang)} value={client.internal_notes || t("passport.noInternalNotes", lang)} />
               </div>
 
               {aiEnabled && (
-                <div className="flex flex-wrap gap-2.5 mt-6 pt-6 border-t border-line">
-                  <button
-                    onClick={openAiSummary}
-                    className="flex items-center gap-2 rounded-full px-4 py-2 text-xs border border-gold text-gold hover:bg-gold hover:text-onaccent transition-colors"
-                  >
-                    <Sparkles size={13} /> Generate summary
-                  </button>
-                  <button
-                    onClick={openAiNextVisit}
-                    className="flex items-center gap-2 rounded-full px-4 py-2 text-xs border border-gold text-gold hover:bg-gold hover:text-onaccent transition-colors"
-                  >
-                    <Sparkles size={13} /> Suggest next visit
-                  </button>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: "var(--space-6)", paddingTop: "var(--space-6)", borderTop: "1px solid var(--border-subtle)" }}>
+                  <Button variant="secondary" size="sm" icon={<Sparkles size={13} />} onClick={openAiSummary}>{t("passport.generateSummary", lang)}</Button>
+                  <Button variant="secondary" size="sm" icon={<Sparkles size={13} />} onClick={openAiNextVisit}>{t("passport.suggestNextVisit", lang)}</Button>
                 </div>
               )}
             </div>
 
-            {detailError && <p className="text-sm text-danger">{detailError}</p>}
+            {detailError && <p style={{ fontSize: 14, color: "var(--error-fg)" }}>{detailError}</p>}
 
             {/* Appointment history */}
             <div>
-              <h3 className="font-display text-xl text-ivory mb-4">Appointment history</h3>
-              {detailLoading && <p className="text-muted text-sm">Loading…</p>}
+              <h3 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h3)", color: "var(--text-primary)", margin: "0 0 var(--space-4)" }}>{t("passport.appointmentHistory", lang)}</h3>
+              {detailLoading && <p style={{ color: "var(--text-tertiary)", fontSize: 14 }}>{t("route.loading", lang)}</p>}
               {!detailLoading && appointments.length === 0 && (
-                <p className="text-muted text-sm">No appointments booked yet.</p>
+                <p style={{ color: "var(--text-tertiary)", fontSize: 14 }}>{t("passport.noAppointmentsYet", lang)}</p>
               )}
               {!detailLoading && appointments.length > 0 && (
-                <div className="space-y-2">
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {appointments.map((a) => (
-                    <div key={a.id} className="flex items-center justify-between rounded-xl border border-line bg-surface px-4 py-3 text-sm">
-                      <span className="text-ivory">
-                        {new Date(a.start_time).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                    <div key={a.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", padding: "12px 16px", fontSize: 14 }}>
+                      <span style={{ color: "var(--text-primary)" }}>
+                        {new Date(a.start_time).toLocaleDateString(intlLocale(lang), { day: "numeric", month: "short", year: "numeric" })}
                       </span>
-                      <span className="text-muted">
-                        {(a.appointment_services ?? []).map((l) => l.services?.name).filter(Boolean).join(", ") || "No services on file"}
+                      <span style={{ color: "var(--text-tertiary)" }}>
+                        {(a.appointment_services ?? []).map((l) => l.services?.name).filter(Boolean).join(", ") || t("passport.noServicesOnFile", lang)}
                       </span>
-                      <span className="text-muted uppercase text-[11px] tracking-wide">{a.status}</span>
+                      <span style={{ color: "var(--text-tertiary)", textTransform: "uppercase", fontSize: 11, letterSpacing: "var(--ls-overline)" }}>{translateEnum("status", a.status, lang)}</span>
                     </div>
                   ))}
                 </div>
@@ -389,22 +404,17 @@ export default function BeautyPassport() {
 
             {/* Visit timeline */}
             <div>
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="font-display text-2xl text-ivory">Her story so far</h3>
-                <button
-                  onClick={openLogVisit}
-                  className="flex items-center gap-2 rounded-full px-4 py-2 text-sm border border-gold text-gold hover:bg-gold hover:text-onaccent transition-colors"
-                >
-                  <Plus size={15} /> Log a visit
-                </button>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-5)" }}>
+                <h3 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h2)", color: "var(--text-primary)", margin: 0 }}>{t("passport.herStorySoFar", lang)}</h3>
+                <Button variant="secondary" size="sm" icon={<Plus size={15} />} onClick={openLogVisit}>{t("passport.logVisit", lang)}</Button>
               </div>
 
-              {detailLoading && <p className="text-muted text-sm">Loading…</p>}
+              {detailLoading && <p style={{ color: "var(--text-tertiary)", fontSize: 14 }}>{t("route.loading", lang)}</p>}
               {!detailLoading && visits.length === 0 && (
-                <p className="text-muted text-sm">No visits logged yet — log the first one above.</p>
+                <p style={{ color: "var(--text-tertiary)", fontSize: 14 }}>{t("passport.noVisitsLogged", lang)}</p>
               )}
 
-              <div className="space-y-4">
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {visits.map((v) => {
                   const expanded = expandedVisitId === v.id;
                   const services = visitServices(v);
@@ -414,55 +424,55 @@ export default function BeautyPassport() {
                   const after = files.find((f) => f.file_purpose === "after");
 
                   return (
-                    <div key={v.id} className="rounded-2xl border border-line bg-surface overflow-hidden">
-                      <button onClick={() => toggleVisit(v)} className="w-full flex items-center justify-between px-6 py-4 text-left">
+                    <div key={v.id} style={{ borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", overflow: "hidden" }}>
+                      <button onClick={() => toggleVisit(v)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "var(--space-5)", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-body)" }}>
                         <div>
-                          <p className="font-display text-lg text-ivory">{new Date(v.visit_date).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</p>
-                          <p className="text-muted text-xs mt-0.5">
-                            {services.length > 0 ? services.join(", ") : "No linked services"}
+                          <p style={{ margin: 0, fontFamily: "var(--font-display)", fontSize: "var(--text-h4)", color: "var(--text-primary)" }}>{new Date(v.visit_date).toLocaleDateString(intlLocale(lang), { day: "numeric", month: "long", year: "numeric" })}</p>
+                          <p style={{ margin: "3px 0 0", fontSize: 12, color: "var(--text-tertiary)" }}>
+                            {services.length > 0 ? services.join(", ") : t("passport.noLinkedServices", lang)}
                             {duration ? ` · ${duration}` : ""}
-                            {v.staff_id === user?.id ? " · You" : ""}
+                            {v.staff_id === user?.id ? t("passport.youSuffix", lang) : ""}
                           </p>
                         </div>
-                        {expanded ? <ChevronUp size={18} className="text-muted" /> : <ChevronDown size={18} className="text-muted" />}
+                        {expanded ? <ChevronUp size={18} color="var(--text-tertiary)" /> : <ChevronDown size={18} color="var(--text-tertiary)" />}
                       </button>
 
                       {expanded && (
-                        <div className="px-6 pb-6 space-y-4 border-t border-line pt-4">
-                          <Field label="Services">
-                            <p className="text-ivory text-sm">{services.length > 0 ? services.join(", ") : "—"}</p>
-                          </Field>
-                          <Field label="Notes">
-                            <p className="text-ivory/80 text-sm leading-relaxed">{v.summary_notes || "No notes on file."}</p>
-                          </Field>
-                          <Field label="Photos">
+                        <div style={{ padding: "0 var(--space-5) var(--space-5)", display: "flex", flexDirection: "column", gap: 14, borderTop: "1px solid var(--border-subtle)", paddingTop: 14 }}>
+                          <PassportField label={t("passport.field.services", lang)}>
+                            <p style={{ margin: 0, fontSize: 14, color: "var(--text-primary)" }}>{services.length > 0 ? services.join(", ") : "—"}</p>
+                          </PassportField>
+                          <PassportField label={t("passport.field.notes", lang)}>
+                            <p style={{ margin: 0, fontSize: 14, color: "var(--text-secondary)", lineHeight: "var(--lh-body)" }}>{v.summary_notes || t("passport.noNotesOnFile", lang)}</p>
+                          </PassportField>
+                          <PassportField label={t("passport.field.photos", lang)}>
                             {before || after ? (
-                              <div className="flex gap-3">
-                                {before && <img src={before.file_url} alt="Before" width={96} height={96} loading="lazy" className="h-24 w-24 rounded-lg object-cover border border-line" />}
-                                {after && <img src={after.file_url} alt="After" width={96} height={96} loading="lazy" className="h-24 w-24 rounded-lg object-cover border border-line" />}
+                              <div style={{ display: "flex", gap: 12 }}>
+                                {before && <img src={before.file_url} alt="Before" width={96} height={96} loading="lazy" className="h-24 w-24 rounded-lg object-cover" style={{ border: "1px solid var(--border-subtle)" }} />}
+                                {after && <img src={after.file_url} alt="After" width={96} height={96} loading="lazy" className="h-24 w-24 rounded-lg object-cover" style={{ border: "1px solid var(--border-subtle)" }} />}
                               </div>
                             ) : (
-                              <p className="text-muted text-xs">No photos on file.</p>
+                              <p style={{ margin: 0, fontSize: 12, color: "var(--text-tertiary)" }}>{t("passport.noPhotosOnFile", lang)}</p>
                             )}
-                          </Field>
-                          <Field label="Formula">
-                            <p className="text-ivory text-sm">{v.formula_data?.mix || "—"}</p>
-                          </Field>
-                          <Field label="Next recommendation">
-                            <p className="text-ivory text-sm">{v.formula_data?.recommendation || "—"}</p>
-                          </Field>
+                          </PassportField>
+                          <PassportField label={t("passport.field.formula", lang)}>
+                            <p style={{ margin: 0, fontSize: 14, color: "var(--text-primary)" }}>{v.formula_data?.mix || "—"}</p>
+                          </PassportField>
+                          <PassportField label={t("passport.field.nextRecommendation", lang)}>
+                            <p style={{ margin: 0, fontSize: 14, color: "var(--text-primary)" }}>{v.formula_data?.recommendation || "—"}</p>
+                          </PassportField>
                           {(v.products_used ?? []).length > 0 && (
-                            <Field label="Products used">
-                              <p className="text-ivory text-sm">{v.products_used.join(", ")}</p>
-                            </Field>
+                            <PassportField label={t("passport.field.productsUsed", lang)}>
+                              <p style={{ margin: 0, fontSize: 14, color: "var(--text-primary)" }}>{v.products_used.join(", ")}</p>
+                            </PassportField>
                           )}
-                          <div className="flex items-center gap-4">
-                            <button onClick={() => openEditVisit(v)} className="text-xs text-gold hover:underline">
-                              Edit this visit
+                          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                            <button onClick={() => openEditVisit(v)} style={{ fontSize: 12, color: "var(--accent-gold-strong)", background: "none", border: "none", padding: 0, cursor: "pointer", textDecoration: "underline" }}>
+                              {t("passport.editThisVisit", lang)}
                             </button>
                             {aiEnabled && services.length > 0 && (
-                              <button onClick={() => openAiAftercare(v)} className="flex items-center gap-1.5 text-xs text-gold hover:underline">
-                                <Sparkles size={12} /> Generate aftercare
+                              <button onClick={() => openAiAftercare(v)} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--accent-gold-strong)", background: "none", border: "none", padding: 0, cursor: "pointer", textDecoration: "underline" }}>
+                                <Sparkles size={12} /> {t("passport.generateAftercare", lang)}
                               </button>
                             )}
                           </div>
@@ -477,118 +487,60 @@ export default function BeautyPassport() {
         )}
       </div>
 
-      {formOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !saving && setFormOpen(false)}>
-          <form onSubmit={handleSaveVisit} onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl border border-line bg-surface p-6 max-h-[85vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="font-display text-xl text-ivory">{editingVisitId ? "Edit visit" : "Log a visit"}</h2>
-              <button type="button" onClick={() => setFormOpen(false)} className="text-muted hover:text-ivory">
-                <X size={18} />
-              </button>
+      <Dialog
+        open={formOpen}
+        onClose={() => !saving && setFormOpen(false)}
+        title={editingVisitId ? t("passport.editVisitTitle", lang) : t("passport.logVisitTitle", lang)}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setFormOpen(false)} disabled={saving}>{t("action.cancel", lang)}</Button>
+            <Button variant="gold" onClick={handleSaveVisit} disabled={saving}>{saving ? t("action.saving", lang) : editingVisitId ? t("appointments.saveChanges", lang) : t("passport.logVisitAction", lang)}</Button>
+          </>
+        }
+      >
+        <form onSubmit={handleSaveVisit}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <Input label={t("passport.visitDate", lang)} type="date" value={form.visit_date} onChange={(e) => setForm({ ...form, visit_date: e.target.value })} />
+
+            <Select
+              label={t("passport.linkedAppointment", lang)}
+              value={form.appointment_id}
+              onChange={(e) => setForm({ ...form, appointment_id: e.target.value })}
+              placeholder={t("passport.noLinkedAppointment", lang)}
+              options={appointments.map((a) => ({
+                value: a.id,
+                label: `${new Date(a.start_time).toLocaleDateString(intlLocale(lang), { day: "numeric", month: "short", year: "numeric" })} — ${(a.appointment_services ?? []).map((l) => l.services?.name).filter(Boolean).join(", ") || t("passport.noServicesLabel", lang)}`,
+              }))}
+            />
+
+            <div>
+              <label htmlFor="visit-notes" style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>{t("passport.field.notes", lang)}</label>
+              <textarea
+                id="visit-notes"
+                value={form.summary_notes}
+                onChange={(e) => setForm({ ...form, summary_notes: e.target.value })}
+                rows={3}
+                style={{ width: "100%", background: "var(--surface-card)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", padding: "10px 14px", fontSize: 14, color: "var(--text-primary)", fontFamily: "var(--font-body)", outline: "none", resize: "none", boxSizing: "border-box" }}
+              />
             </div>
 
-            <div className="space-y-4">
-              <Field label="Visit date">
-                <input
-                  type="date"
-                  value={form.visit_date}
-                  onChange={(e) => setForm({ ...form, visit_date: e.target.value })}
-                  className="w-full bg-surface-2 border border-line rounded-xl px-3 py-2.5 text-sm text-ivory outline-none focus:border-wine"
-                />
-              </Field>
+            <Input label={t("passport.productsUsedCsv", lang)} value={form.products_used} onChange={(e) => setForm({ ...form, products_used: e.target.value })} />
+            <Input label={t("passport.formula", lang)} value={form.formula_mix} onChange={(e) => setForm({ ...form, formula_mix: e.target.value })} placeholder={t("passport.formulaPlaceholder", lang)} />
+            <Input label={t("passport.nextRecommendation", lang)} value={form.recommendation} onChange={(e) => setForm({ ...form, recommendation: e.target.value })} placeholder={t("passport.nextRecommendationPlaceholder", lang)} />
+            <Input label={t("passport.beforePhotoUrl", lang)} value={form.before_photo_url} onChange={(e) => setForm({ ...form, before_photo_url: e.target.value })} placeholder="https://…" />
+            <Input label={t("passport.afterPhotoUrl", lang)} value={form.after_photo_url} onChange={(e) => setForm({ ...form, after_photo_url: e.target.value })} placeholder="https://…" />
 
-              <Field label="Linked appointment (optional -- determines services shown & duration)">
-                <select
-                  value={form.appointment_id}
-                  onChange={(e) => setForm({ ...form, appointment_id: e.target.value })}
-                  className="w-full bg-surface-2 border border-line rounded-xl px-3 py-2.5 text-sm text-ivory outline-none focus:border-wine"
-                >
-                  <option value="">No linked appointment</option>
-                  {appointments.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {new Date(a.start_time).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                      {" — "}
-                      {(a.appointment_services ?? []).map((l) => l.services?.name).filter(Boolean).join(", ") || "no services"}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+            {formError && <p style={{ margin: 0, fontSize: 13, color: "var(--error-fg)" }}>{formError}</p>}
+          </div>
+        </form>
+      </Dialog>
 
-              <Field label="Notes">
-                <textarea
-                  value={form.summary_notes}
-                  onChange={(e) => setForm({ ...form, summary_notes: e.target.value })}
-                  rows={3}
-                  className="w-full bg-surface-2 border border-line rounded-xl px-3 py-2.5 text-sm text-ivory outline-none focus:border-wine resize-none"
-                />
-              </Field>
-
-              <Field label="Products used (comma separated)">
-                <input
-                  value={form.products_used}
-                  onChange={(e) => setForm({ ...form, products_used: e.target.value })}
-                  className="w-full bg-surface-2 border border-line rounded-xl px-3 py-2.5 text-sm text-ivory outline-none focus:border-wine"
-                />
-              </Field>
-
-              <Field label="Formula">
-                <input
-                  value={form.formula_mix}
-                  onChange={(e) => setForm({ ...form, formula_mix: e.target.value })}
-                  placeholder="e.g. 7.3 + 20vol, 30min"
-                  className="w-full bg-surface-2 border border-line rounded-xl px-3 py-2.5 text-sm text-ivory outline-none focus:border-wine"
-                />
-              </Field>
-
-              <Field label="Next recommendation">
-                <input
-                  value={form.recommendation}
-                  onChange={(e) => setForm({ ...form, recommendation: e.target.value })}
-                  placeholder="e.g. Gloss refresh in 6 weeks"
-                  className="w-full bg-surface-2 border border-line rounded-xl px-3 py-2.5 text-sm text-ivory outline-none focus:border-wine"
-                />
-              </Field>
-
-              <Field label="Before photo URL (optional)">
-                <input
-                  value={form.before_photo_url}
-                  onChange={(e) => setForm({ ...form, before_photo_url: e.target.value })}
-                  placeholder="https://…"
-                  className="w-full bg-surface-2 border border-line rounded-xl px-3 py-2.5 text-sm text-ivory outline-none focus:border-wine"
-                />
-              </Field>
-              <Field label="After photo URL (optional)">
-                <input
-                  value={form.after_photo_url}
-                  onChange={(e) => setForm({ ...form, after_photo_url: e.target.value })}
-                  placeholder="https://…"
-                  className="w-full bg-surface-2 border border-line rounded-xl px-3 py-2.5 text-sm text-ivory outline-none focus:border-wine"
-                />
-              </Field>
-
-              {formError && <p className="text-xs text-danger">{formError}</p>}
-            </div>
-
-            <div className="flex justify-end gap-3 mt-6">
-              <button type="button" onClick={() => setFormOpen(false)} className="text-sm text-muted hover:text-ivory px-4 py-2">
-                Cancel
-              </button>
-              <button type="submit" disabled={saving} className="rounded-full bg-wine text-onaccent text-sm font-medium px-5 py-2.5 disabled:opacity-50">
-                {saving ? "Saving…" : editingVisitId ? "Save changes" : "Log visit"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {aiPanel && (
-        <AiResultPanel panel={aiPanel} onClose={() => setAiPanel(null)} />
-      )}
+      {aiPanel && <AiResultPanel panel={aiPanel} onClose={() => setAiPanel(null)} lang={lang} />}
     </Layout>
   );
 }
 
-function AiResultPanel({ panel, onClose }) {
+function AiResultPanel({ panel, onClose, lang }) {
   const [text, setText] = useState(panel.text);
   const [copied, setCopied] = useState(false);
 
@@ -608,62 +560,61 @@ function AiResultPanel({ panel, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg rounded-2xl border border-line bg-surface p-6 max-h-[85vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-xl text-ivory flex items-center gap-2">
-            <Sparkles size={17} className="text-gold" /> {panel.title}
-          </h2>
-          <button onClick={onClose} className="text-muted hover:text-ivory">
-            <X size={18} />
-          </button>
-        </div>
+    <Dialog
+      open
+      onClose={onClose}
+      title={
+        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Sparkles size={16} color="var(--accent-gold-strong)" /> {panel.title}
+        </span>
+      }
+    >
+      {panel.loading && <p style={{ color: "var(--text-tertiary)", fontSize: 14 }}>{t("passport.ai.generating", lang)}</p>}
+      {panel.error && <p style={{ fontSize: 14, color: "var(--error-fg)" }}>{panel.error}</p>}
 
-        {panel.loading && <p className="text-muted text-sm">Generating…</p>}
-        {panel.error && <p className="text-sm text-danger">{panel.error}</p>}
-
-        {!panel.loading && !panel.error && (
-          <>
-            {panel.warn && (
-              <div className="flex items-start gap-2 rounded-xl border border-danger/40 bg-danger/5 px-4 py-3 text-xs text-danger mb-3">
-                <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-                <span>This is AI-generated general guidance, not medical advice. Review it carefully before sharing it with your client.</span>
-              </div>
-            )}
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={12}
-              className="w-full bg-surface-2 border border-line rounded-xl px-3 py-2.5 text-sm text-ivory outline-none focus:border-wine resize-none"
-            />
-            <div className="flex items-center justify-between mt-3">
-              <p className="text-[11px] text-muted">AI-generated — nothing here is saved automatically. Review before using it.</p>
-              <button onClick={copy} className="flex items-center gap-1.5 text-xs text-gold hover:underline shrink-0 ml-3">
-                {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy"}
-              </button>
+      {!panel.loading && !panel.error && (
+        <>
+          {panel.warn && (
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 8, borderRadius: "var(--radius-md)", border: "1px solid var(--error-fg)", background: "var(--error-bg)", padding: "10px 14px", fontSize: 12, color: "var(--error-fg)", marginBottom: 12 }}>
+              <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+              <span>{t("passport.ai.medicalWarning", lang)}</span>
             </div>
-          </>
-        )}
-      </div>
-    </div>
+          )}
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={12}
+            style={{ width: "100%", background: "var(--surface-card-alt)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", padding: "10px 14px", fontSize: 14, color: "var(--text-primary)", fontFamily: "var(--font-body)", outline: "none", resize: "none", boxSizing: "border-box" }}
+          />
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
+            <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: 0 }}>{t("passport.ai.reviewNote", lang)}</p>
+            {/* Logical property, not physical marginLeft -- see the same
+                fix in Appointments.jsx for why. */}
+            <button onClick={copy} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--accent-gold-strong)", background: "none", border: "none", cursor: "pointer", flexShrink: 0, marginInlineStart: 12 }}>
+              {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? t("passport.ai.copied", lang) : t("passport.ai.copy", lang)}
+            </button>
+          </div>
+        </>
+      )}
+    </Dialog>
   );
 }
 
 function InfoCard({ icon: Icon, label, value, warn }) {
   return (
-    <div className={`rounded-2xl border px-5 py-4 ${warn ? "border-danger/40 bg-danger/5" : "border-line bg-surface-2"}`}>
-      <p className={`text-[11px] uppercase tracking-wide flex items-center gap-1.5 ${warn ? "text-danger" : "text-muted"}`}>
+    <div style={{ borderRadius: "var(--radius-lg)", border: "1px solid " + (warn ? "var(--error-fg)" : "var(--border-subtle)"), background: warn ? "var(--error-bg)" : "var(--bg-sunken)", padding: "14px 18px" }}>
+      <p style={{ margin: 0, fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-overline)", display: "flex", alignItems: "center", gap: 6, color: warn ? "var(--error-fg)" : "var(--text-tertiary)" }}>
         <Icon size={13} /> {label}
       </p>
-      <p className="text-ivory text-[15px] mt-1.5">{value}</p>
+      <p style={{ margin: "6px 0 0", fontSize: 14, color: "var(--text-primary)" }}>{value}</p>
     </div>
   );
 }
 
-function Field({ label, children }) {
+function PassportField({ label, children }) {
   return (
     <div>
-      <p className="text-[11px] uppercase tracking-wide text-muted mb-1.5">{label}</p>
+      <p style={{ margin: "0 0 4px", fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-overline)", color: "var(--text-tertiary)" }}>{label}</p>
       {children}
     </div>
   );
