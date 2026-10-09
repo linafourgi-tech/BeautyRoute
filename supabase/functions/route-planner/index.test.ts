@@ -158,7 +158,7 @@ Deno.test("low-confidence geocode (relevance < 0.7) is treated as unresolved, no
     "/auth/v1/user": () => authUserResponse("user-low-relevance"),
     "/rest/v1/workspaces": () => jsonRes([workspaceRow()]),
     "/rest/v1/appointments": () => jsonRes([appointmentRow()]),
-    "api.mapbox.com/geocoding": () => jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.4 }] }),
+    "api.mapbox.com/geocoding": () => jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.4, place_type: ["address"] }] }),
   });
   try {
     const res = await handler(postRequest(FUNCTION_URL, { action: "plan", workspaceId: FAKE_WORKSPACE_ID, date: "2026-08-02" }, authHeader()));
@@ -186,7 +186,7 @@ Deno.test("secret Mapbox token never reaches the response body, even though it's
     const url = input instanceof Request ? input.url : input.toString();
     if (url.includes("api.mapbox.com")) {
       if (url.includes("super-secret-mapbox-token-12345")) sawTokenInRequest = true;
-      return jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95 }] });
+      return jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95, place_type: ["address"] }] });
     }
     return await inner(input, init);
   }) as typeof fetch;
@@ -485,7 +485,7 @@ function trackedGeocodeFetch(onCall?: (url: string) => void) {
       onCall?.(url);
       await new Promise((resolve) => setTimeout(resolve, 5));
       inFlight -= 1;
-      return jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95 }] });
+      return jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95, place_type: ["address"] }] });
     }
     if (url.includes("/auth/v1/user")) return authUserResponse("user-geocode-concurrency");
     if (url.includes("/rest/v1/workspaces")) return jsonRes([workspaceRow()]);
@@ -547,7 +547,7 @@ Deno.test("duplicate addresses are still geocoded exactly once under bounded-con
     ]),
     "api.mapbox.com/geocoding": () => {
       geocodeCalls += 1;
-      return jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95 }] });
+      return jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95, place_type: ["address"] }] });
     },
     "api.mapbox.com/directions-matrix": () => jsonRes({ durations: [], distances: [] }),
     "api.mapbox.com/directions/v5": () => jsonRes({ routes: [{ geometry: { type: "LineString", coordinates: [] }, distance: 1000, duration: 100, legs: [{ duration: 0 }, { duration: 0 }] }] }),
@@ -589,7 +589,7 @@ Deno.test("result ordering and appointment-to-address mapping are unchanged unde
       return () => {
         const [lng, lat] = coordsByCall[call % coordsByCall.length];
         call += 1;
-        return jsonRes({ features: [{ center: [lng, lat], relevance: 0.95 }] });
+        return jsonRes({ features: [{ center: [lng, lat], relevance: 0.95, place_type: ["address"] }] });
       };
     })(),
     "api.mapbox.com/directions-matrix": () => jsonRes({ durations: [], distances: [] }),
@@ -630,9 +630,9 @@ Deno.test("unresolved/low-confidence classification is unchanged under parallel 
     }
     if (url.includes("api.mapbox.com/geocoding")) {
       if (decodeURIComponent(url).includes("Good Address")) {
-        return jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95 }] });
+        return jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95, place_type: ["address"] }] });
       }
-      return jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.4 }] }); // below MIN_GEOCODE_RELEVANCE
+      return jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.4, place_type: ["address"] }] }); // below MIN_GEOCODE_RELEVANCE
     }
     if (url.includes("api.mapbox.com/directions-matrix")) return jsonRes({ durations: [], distances: [] });
     if (url.includes("api.mapbox.com/directions/v5")) {
@@ -667,7 +667,7 @@ Deno.test("one geocoding request failure aborts the batch instead of corrupting 
         // Simulate a genuine provider error on exactly one address.
         return jsonRes({ message: "rate limited" }, 429);
       }
-      return jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95 }] });
+      return jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95, place_type: ["address"] }] });
     }
     throw new Error(`Unmocked fetch: ${url}`);
   }) as typeof fetch;
@@ -690,7 +690,7 @@ Deno.test("start/end location geocoding is included in the same bounded batch an
     "/auth/v1/user": () => authUserResponse("user-start-end"),
     "/rest/v1/workspaces": () => jsonRes([workspaceRow()]),
     "/rest/v1/appointments": () => jsonRes([appointmentRow()]),
-    "api.mapbox.com/geocoding": () => jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95 }] }),
+    "api.mapbox.com/geocoding": () => jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95, place_type: ["address"] }] }),
     "api.mapbox.com/directions-matrix": () => jsonRes({ durations: [], distances: [] }),
     "api.mapbox.com/directions/v5": () => jsonRes({ routes: [{ geometry: { type: "LineString", coordinates: [] }, distance: 2000, duration: 300, legs: [{ duration: 100 }, { duration: 100 }] }] }),
   });
@@ -724,7 +724,7 @@ Deno.test("an unresolvable start location is still correctly flagged startUnreso
     if (url.includes("/rest/v1/appointments")) return jsonRes([appointmentRow()]);
     if (url.includes("api.mapbox.com/geocoding")) {
       if (decodeURIComponent(url).includes("Nowhere Real")) return jsonRes({ features: [] });
-      return jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95 }] });
+      return jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95, place_type: ["address"] }] });
     }
     if (url.includes("api.mapbox.com/directions-matrix")) return jsonRes({ durations: [], distances: [] });
     if (url.includes("api.mapbox.com/directions/v5")) {
@@ -798,7 +798,7 @@ Deno.test("reroute accepts a valid SUBSET reorder (client only resubmits success
       appointmentRow({ id: FAKE_APPOINTMENT_ID_2, start_time: "2026-08-02T11:00:00.000Z" }),
       appointmentRow({ id: FAKE_FOREIGN_APPOINTMENT_ID, start_time: "2026-08-02T12:00:00.000Z" }),
     ]),
-    "api.mapbox.com/geocoding": () => jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95 }] }),
+    "api.mapbox.com/geocoding": () => jsonRes({ features: [{ center: [46.6, 24.7], relevance: 0.95, place_type: ["address"] }] }),
     "api.mapbox.com/directions/v5": () => jsonRes({
       routes: [{ geometry: { type: "LineString", coordinates: [] }, distance: 5000, duration: 900, legs: [{ duration: 900 }, { duration: 900 }] }],
     }),
@@ -821,4 +821,383 @@ Deno.test("reroute accepts a valid SUBSET reorder (client only resubmits success
     restore();
     Deno.env.delete("MAPBOX_SECRET_TOKEN");
   }
+});
+
+// ---- Geocoding feature-type restriction + workspace-city proximity -------------------------------------------------
+// Production incident (2026-10): a Riyadh-neighborhood stop ("Al Aqiq")
+// geocoded to a whole TOWN of the same name in another province --
+// Mapbox returned place_type ["place"] with relevance 1, so the relevance
+// threshold couldn't catch it, and the town's center became a route stop.
+// These tests drive fetch directly and route each geocoding response by
+// the (decoded) query text in the URL.
+
+const CITY_CENTER = [46.7, 24.6];
+
+function geocodeFeature(placeType: string[] | undefined, center = [46.6, 24.7], relevance = 0.95) {
+  return { id: `${placeType?.[0] ?? "unknown"}.1`, center, relevance, ...(placeType ? { place_type: placeType } : {}) };
+}
+
+function cityFeatureResponse() {
+  return jsonRes({ features: [{ id: "place.1", center: CITY_CENTER, relevance: 1, place_type: ["place"] }] });
+}
+
+function geocodeHarness(opts: {
+  workspace?: Record<string, unknown>;
+  appointments: Record<string, unknown>[];
+  geocode: (decodedUrl: string) => Response;
+}) {
+  const geocodeUrls: string[] = [];
+  const directionsUrls: string[] = [];
+  let matrixCalls = 0;
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = input instanceof Request ? input.url : input.toString();
+    if (url.includes("/auth/v1/user")) return authUserResponse("user-geocode-types");
+    if (url.includes("/rest/v1/rpc/check_rate_limit")) return jsonRes(true);
+    if (url.includes("/rest/v1/workspaces")) return jsonRes([workspaceRow(opts.workspace)]);
+    if (url.includes("/rest/v1/appointments")) return jsonRes(opts.appointments);
+    if (url.includes("api.mapbox.com/geocoding")) {
+      const decoded = decodeURIComponent(url);
+      geocodeUrls.push(decoded);
+      return opts.geocode(decoded);
+    }
+    if (url.includes("api.mapbox.com/directions-matrix")) {
+      matrixCalls += 1;
+      return jsonRes({ durations: [], distances: [] });
+    }
+    if (url.includes("api.mapbox.com/directions/v5")) {
+      directionsUrls.push(url);
+      return jsonRes({ routes: [{ geometry: { type: "LineString", coordinates: [] }, distance: 1000, duration: 100, legs: [{ duration: 0 }, { duration: 0 }] }] });
+    }
+    throw new Error(`Unmocked fetch: ${url}`);
+  }) as typeof fetch;
+  return {
+    restore: () => { globalThis.fetch = original; },
+    geocodeUrls,
+    directionsUrls,
+    getMatrixCalls: () => matrixCalls,
+    stopUrls: () => geocodeUrls.filter((u) => !u.includes("types=place")),
+    cityUrls: () => geocodeUrls.filter((u) => u.includes("types=place")),
+  };
+}
+
+function planRequest(extra: Record<string, unknown> = {}) {
+  return handler(postRequest(FUNCTION_URL, { action: "plan", workspaceId: FAKE_WORKSPACE_ID, date: "2026-08-02", ...extra }, authHeader()));
+}
+
+Deno.test("incident: a whole-town `place` result with relevance 1 becomes unresolved and is never routed", async () => {
+  Deno.env.set("MAPBOX_SECRET_TOKEN", "fake-mapbox-token");
+  const h = geocodeHarness({
+    appointments: [
+      appointmentRow({ id: FAKE_APPOINTMENT_ID, start_time: "2026-08-02T09:00:00.000Z", location_address: "Al Narjis" }),
+      appointmentRow({ id: FAKE_APPOINTMENT_ID_2, start_time: "2026-08-02T10:00:00.000Z", location_address: "Al Aqiq" }),
+      appointmentRow({ id: FAKE_FOREIGN_APPOINTMENT_ID, start_time: "2026-08-02T11:00:00.000Z", location_address: "King Fahd Road" }),
+    ],
+    geocode: (u) => {
+      if (u.includes("Al Aqiq")) return jsonRes({ features: [{ id: "place.108740", center: [41.6, 20.3], relevance: 1, place_type: ["place"] }] });
+      return jsonRes({ features: [geocodeFeature(["address"])] });
+    },
+  });
+  try {
+    const res = await planRequest();
+    assertEquals(res.status, 200);
+    const body = await res.json();
+    assertEquals(body.unresolved.map((u: { id: string }) => u.id), [FAKE_APPOINTMENT_ID_2]);
+    assertEquals(body.routeable.map((r: { id: string }) => r.id), [FAKE_APPOINTMENT_ID, FAKE_FOREIGN_APPOINTMENT_ID]);
+    assertEquals(body.chronological.order, [FAKE_APPOINTMENT_ID, FAKE_FOREIGN_APPOINTMENT_ID]);
+    // Directions saw exactly the 2 accepted stops, and never the town's center.
+    assertEquals(h.directionsUrls.length, 1);
+    const coords = decodeURIComponent(h.directionsUrls[0]).split("/driving/")[1].split("?")[0].split(";");
+    assertEquals(coords.length, 2);
+    assertEquals(coords.includes("41.6,20.3"), false);
+  } finally {
+    h.restore();
+    Deno.env.delete("MAPBOX_SECRET_TOKEN");
+  }
+});
+
+Deno.test("a lone `place` stop is unresolved and no Matrix/Directions call is made", async () => {
+  Deno.env.set("MAPBOX_SECRET_TOKEN", "fake-mapbox-token");
+  const h = geocodeHarness({
+    appointments: [appointmentRow({ location_address: "Al Aqiq" })],
+    geocode: () => jsonRes({ features: [geocodeFeature(["place"], [41.6, 20.3], 1)] }),
+  });
+  try {
+    const body = await (await planRequest()).json();
+    assertEquals(body.unresolved.length, 1);
+    assertEquals(body.routeable.length, 0);
+    assertEquals(h.getMatrixCalls(), 0);
+    assertEquals(h.directionsUrls.length, 0);
+  } finally {
+    h.restore();
+    Deno.env.delete("MAPBOX_SECRET_TOKEN");
+  }
+});
+
+Deno.test("every stop lookup requests types=address,neighborhood,locality -- never the v5-invalid `street` or removed `poi`", async () => {
+  Deno.env.set("MAPBOX_SECRET_TOKEN", "fake-mapbox-token");
+  const h = geocodeHarness({
+    appointments: manyAddressedAppointments(3),
+    geocode: () => jsonRes({ features: [geocodeFeature(["address"])] }),
+  });
+  try {
+    assertEquals((await planRequest()).status, 200);
+    assertEquals(h.stopUrls().length, 3);
+    for (const u of h.stopUrls()) {
+      assertStringIncludes(u, "types=address,neighborhood,locality&");
+      assertEquals(u.includes("street"), false);
+      assertEquals(u.includes("poi"), false);
+    }
+  } finally {
+    h.restore();
+    Deno.env.delete("MAPBOX_SECRET_TOKEN");
+  }
+});
+
+for (const allowed of ["address", "neighborhood", "locality"]) {
+  Deno.test(`stop result of type ${allowed} is still accepted`, async () => {
+    Deno.env.set("MAPBOX_SECRET_TOKEN", "fake-mapbox-token");
+    const h = geocodeHarness({
+      appointments: [appointmentRow()],
+      geocode: () => jsonRes({ features: [geocodeFeature([allowed])] }),
+    });
+    try {
+      const body = await (await planRequest()).json();
+      assertEquals(body.routeable.length, 1);
+      assertEquals(body.unresolved.length, 0);
+    } finally {
+      h.restore();
+      Deno.env.delete("MAPBOX_SECRET_TOKEN");
+    }
+  });
+}
+
+const REJECTED_STOP_TYPES: Array<[string, string[] | undefined]> = [
+  ["district", ["district"]],
+  ["region", ["region"]],
+  ["postcode", ["postcode"]],
+  ["country", ["country"]],
+  ["missing place_type", undefined],
+  ["mixed place+locality", ["place", "locality"]],
+];
+
+for (const [label, placeType] of REJECTED_STOP_TYPES) {
+  Deno.test(`a stop result with ${label} is rejected (strict type check)`, async () => {
+    Deno.env.set("MAPBOX_SECRET_TOKEN", "fake-mapbox-token");
+    const h = geocodeHarness({
+      appointments: [appointmentRow()],
+      geocode: () => jsonRes({ features: [geocodeFeature(placeType, [46.6, 24.7], 1)] }),
+    });
+    try {
+      const body = await (await planRequest()).json();
+      assertEquals(body.routeable.length, 0);
+      assertEquals(body.unresolved.length, 1);
+    } finally {
+      h.restore();
+      Deno.env.delete("MAPBOX_SECRET_TOKEN");
+    }
+  });
+}
+
+Deno.test("workspace city: geocoded once as a `place`, used as proximity for every stop lookup, and never itself a stop", async () => {
+  Deno.env.set("MAPBOX_SECRET_TOKEN", "fake-mapbox-token");
+  const h = geocodeHarness({
+    workspace: { city: "Riyadh" },
+    appointments: manyAddressedAppointments(3),
+    geocode: (u) => u.includes("types=place") ? cityFeatureResponse() : jsonRes({ features: [geocodeFeature(["address"])] }),
+  });
+  try {
+    const body = await (await planRequest()).json();
+    assertEquals(h.cityUrls().length, 1);
+    assertStringIncludes(h.cityUrls()[0], "/Riyadh.json?limit=1&types=place&");
+    assertEquals(h.cityUrls()[0].includes("proximity="), false);
+    assertEquals(h.stopUrls().length, 3);
+    for (const u of h.stopUrls()) assertStringIncludes(u, `&proximity=${CITY_CENTER[0]},${CITY_CENTER[1]}&`);
+    assertEquals(h.geocodeUrls.length, 4); // 3 stops + 1 city, nothing else
+    assertEquals(body.routeable.length, 3);
+    assertEquals(body.unresolved.length, 0);
+    assertEquals(body.routeable.some((r: { lat: number; lng: number }) => r.lng === CITY_CENTER[0] && r.lat === CITY_CENTER[1]), false);
+  } finally {
+    h.restore();
+    Deno.env.delete("MAPBOX_SECRET_TOKEN");
+  }
+});
+
+Deno.test("no workspace city: no city lookup, no proximity, stops still type-restricted and routed", async () => {
+  Deno.env.set("MAPBOX_SECRET_TOKEN", "fake-mapbox-token");
+  try {
+    for (const city of [null, "", "   "]) {
+      const h = geocodeHarness({
+        workspace: { city },
+        appointments: manyAddressedAppointments(2),
+        geocode: () => jsonRes({ features: [geocodeFeature(["address"])] }),
+      });
+      try {
+        const res = await planRequest();
+        assertEquals(res.status, 200);
+        assertEquals((await res.json()).routeable.length, 2);
+        assertEquals(h.cityUrls().length, 0);
+        assertEquals(h.geocodeUrls.length, 2);
+        for (const u of h.geocodeUrls) {
+          assertEquals(u.includes("proximity="), false);
+          assertStringIncludes(u, "types=address,neighborhood,locality&");
+        }
+      } finally {
+        h.restore();
+      }
+    }
+  } finally {
+    Deno.env.delete("MAPBOX_SECRET_TOKEN");
+  }
+});
+
+Deno.test("workspace city that doesn't resolve: no proximity, stops still geocoded and routed", async () => {
+  Deno.env.set("MAPBOX_SECRET_TOKEN", "fake-mapbox-token");
+  const h = geocodeHarness({
+    workspace: { city: "Nowhere City" },
+    appointments: manyAddressedAppointments(2),
+    geocode: (u) => u.includes("types=place") ? jsonRes({ features: [] }) : jsonRes({ features: [geocodeFeature(["address"])] }),
+  });
+  try {
+    const body = await (await planRequest()).json();
+    assertEquals(h.cityUrls().length, 1);
+    assertEquals(h.stopUrls().length, 2);
+    for (const u of h.stopUrls()) assertEquals(u.includes("proximity="), false);
+    assertEquals(body.routeable.length, 2);
+  } finally {
+    h.restore();
+    Deno.env.delete("MAPBOX_SECRET_TOKEN");
+  }
+});
+
+Deno.test("reroute uses identical geocoding: same type restriction, same city proximity, and rejects a `place` stop", async () => {
+  Deno.env.set("MAPBOX_SECRET_TOKEN", "fake-mapbox-token");
+  const appointments = [
+    appointmentRow({ id: FAKE_APPOINTMENT_ID, start_time: "2026-08-02T09:00:00.000Z", location_address: "Al Narjis" }),
+    appointmentRow({ id: FAKE_APPOINTMENT_ID_2, start_time: "2026-08-02T10:00:00.000Z", location_address: "Al Aqiq" }),
+  ];
+  const reroute = () => handler(postRequest(FUNCTION_URL, { action: "reroute", workspaceId: FAKE_WORKSPACE_ID, date: "2026-08-02", order: [FAKE_APPOINTMENT_ID_2, FAKE_APPOINTMENT_ID] }, authHeader()));
+  try {
+    const ok = geocodeHarness({
+      workspace: { city: "Riyadh" },
+      appointments,
+      geocode: (u) => u.includes("types=place") ? cityFeatureResponse() : jsonRes({ features: [geocodeFeature(["neighborhood"])] }),
+    });
+    try {
+      assertEquals((await reroute()).status, 200);
+      assertEquals(ok.cityUrls().length, 1);
+      assertEquals(ok.stopUrls().length, 2);
+      for (const u of ok.stopUrls()) {
+        assertStringIncludes(u, "types=address,neighborhood,locality&");
+        assertStringIncludes(u, `&proximity=${CITY_CENTER[0]},${CITY_CENTER[1]}&`);
+      }
+    } finally {
+      ok.restore();
+    }
+
+    const bad = geocodeHarness({
+      workspace: { city: "Riyadh" },
+      appointments,
+      geocode: (u) => {
+        if (u.includes("types=place")) return cityFeatureResponse();
+        if (u.includes("Al Aqiq")) return jsonRes({ features: [{ id: "place.108740", center: [41.6, 20.3], relevance: 1, place_type: ["place"] }] });
+        return jsonRes({ features: [geocodeFeature(["address"])] });
+      },
+    });
+    try {
+      const res = await reroute();
+      assertEquals(res.status, 422);
+      assertObjectMatch(await res.json(), { ok: false, code: "unresolved_in_order" });
+      assertEquals(bad.directionsUrls.length, 0);
+    } finally {
+      bad.restore();
+    }
+  } finally {
+    Deno.env.delete("MAPBOX_SECRET_TOKEN");
+  }
+});
+
+Deno.test("start/end lookups are deliberately unchanged -- no type restriction and no city proximity", async () => {
+  Deno.env.set("MAPBOX_SECRET_TOKEN", "fake-mapbox-token");
+  const h = geocodeHarness({
+    workspace: { city: "Riyadh" },
+    appointments: [appointmentRow({ location_address: "Al Narjis" })],
+    geocode: (u) => u.includes("types=place")
+      ? cityFeatureResponse()
+      : jsonRes({ features: [geocodeFeature(u.includes("Home Base") ? ["place"] : ["address"])] }),
+  });
+  try {
+    const body = await (await planRequest({ startLocation: "Home Base", endLocation: "End Base" })).json();
+    const startEndUrls = h.geocodeUrls.filter((u) => u.includes("Home Base") || u.includes("End Base"));
+    assertEquals(startEndUrls.length, 2);
+    for (const u of startEndUrls) {
+      assertEquals(u.includes("types="), false);
+      assertEquals(u.includes("proximity="), false);
+    }
+    // Same as before this change: a start that resolves to a `place` is still accepted.
+    assertEquals(body.startUnresolved, false);
+    assertEquals(body.endUnresolved, false);
+  } finally {
+    h.restore();
+    Deno.env.delete("MAPBOX_SECRET_TOKEN");
+  }
+});
+
+Deno.test("logging never includes addresses, coordinates, the Mapbox token, feature ids, or provider free-text -- only codes and counts", async () => {
+  const token = "secret-mapbox-token-should-never-be-logged";
+  Deno.env.set("MAPBOX_SECRET_TOKEN", token);
+  const addressA = "12 Private Client Street";
+  const addressB = "Al Aqiq";
+  const leakyMessage = "Coordinate 46.6123,24.8123 is invalid for 12 Private Client Street";
+  const logs: string[] = [];
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => {
+    logs.push(args.map(String).join(" "));
+  };
+  const appointments = [
+    appointmentRow({ id: FAKE_APPOINTMENT_ID, start_time: "2026-08-02T09:00:00.000Z", location_address: addressA }),
+    appointmentRow({ id: FAKE_APPOINTMENT_ID_2, start_time: "2026-08-02T10:00:00.000Z", location_address: addressB }),
+    appointmentRow({ id: FAKE_FOREIGN_APPOINTMENT_ID, start_time: "2026-08-02T11:00:00.000Z", location_address: "Second Private Road" }),
+  ];
+  const geocode = (u: string) => {
+    if (u.includes("types=place")) return cityFeatureResponse();
+    if (u.includes(addressB)) return jsonRes({ features: [{ id: "place.108740", center: [41.6, 20.3], relevance: 1, place_type: ["place"] }] });
+    return jsonRes({ features: [{ id: "address.4523774643280366", center: [46.6123, 24.8123], relevance: 0.98, place_type: ["address"] }] });
+  };
+  try {
+    // 1) Successful plan: one stop rejected by type, city bias applied.
+    const ok = geocodeHarness({ workspace: { city: "Riyadh" }, appointments, geocode });
+    try {
+      assertEquals((await planRequest()).status, 200);
+    } finally {
+      ok.restore();
+    }
+    // 2) Directions returns no route, with a provider message that echoes input.
+    const original = globalThis.fetch;
+    const noRoute = geocodeHarness({ workspace: { city: "Riyadh" }, appointments, geocode });
+    const harnessFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : input.toString();
+      if (url.includes("api.mapbox.com/directions/v5")) return jsonRes({ code: "NoRoute", message: leakyMessage, routes: [] });
+      return await harnessFetch(input, init);
+    }) as typeof fetch;
+    try {
+      assertEquals((await planRequest()).status, 502);
+    } finally {
+      globalThis.fetch = original;
+      noRoute.restore();
+    }
+  } finally {
+    console.log = originalLog;
+    Deno.env.delete("MAPBOX_SECRET_TOKEN");
+  }
+  const joined = logs.join("\n");
+  for (const forbidden of [token, addressA, addressB, "Second Private Road", "Riyadh", "46.6123", "24.8123", "41.6", "20.3", "address.4523774643280366", "place.108740", leakyMessage, "featureId", "mapboxMessage", "directionsMessage"]) {
+    assertEquals(joined.includes(forbidden), false, `log output must not contain ${JSON.stringify(forbidden)}`);
+  }
+  // Sanity: the useful codes and counts ARE logged.
+  const okLine = logs.find((l) => l.includes('"status":"ok"'))!;
+  assertObjectMatch(JSON.parse(okLine), { stopCount: 3, resolvedCount: 2, unresolvedCount: 1, geocodeRejectedType: 1, geocodeNotFound: 0, geocodeRejectedRelevance: 0, cityBiasApplied: true, pointCount: 2 });
+  const errorLine = logs.find((l) => l.includes('"status":"error"'))!;
+  assertObjectMatch(JSON.parse(errorLine), { stopCount: 3, resolvedCount: 2, mapboxEndpoint: "directions", mapboxHttpStatus: 422, syntheticStatus: true, directionsCode: "NoRoute", pointCount: 2 });
 });

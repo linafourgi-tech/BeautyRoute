@@ -98,24 +98,94 @@ async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Respons
 // threshold we treat the address as unresolved rather than trust a guess.
 const MIN_GEOCODE_RELEVANCE = 0.7;
 
-async function geocodeAddress(address: string, token: string): Promise<LatLng | null> {
-  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?limit=1&access_token=${token}`;
+// Relevance alone can't catch the most damaging fuzzy match: a query that
+// happens to be the exact name of a whole town elsewhere (e.g. a Riyadh
+// neighborhood sharing its name with a town in another province) scores a
+// perfect relevance of 1, and the town's center would silently become a
+// route stop. So appointment stops are additionally restricted to these
+// Geocoding v5 feature types -- sent as `types=` so Mapbox searches only
+// these layers, and re-checked on the result. v5 has no `street` type (a
+// street-only query comes back as an `address` feature at the street's
+// centroid) and no longer serves `poi`; passing either is a 422. place,
+// district, region, postcode, and country are never a specific visit
+// location.
+const STOP_GEOCODE_TYPES = ["address", "neighborhood", "locality"];
+
+// The workspace's own city (workspaces.city) is geocoded once as a `place`
+// and used only as Mapbox's `proximity` bias for stop lookups, so an
+// ambiguous stop name prefers the match near where the professional
+// actually works. It's a ranking hint, never a filter, and never a route
+// point itself.
+const CITY_GEOCODE_TYPES = ["place"];
+
+// Per-request tally of WHY stop lookups came back unresolved -- counts
+// only, logged on the request's outcome line. Never which stop, never the
+// address or the match itself.
+type GeocodeStats = { geocodeNotFound: number; geocodeRejectedRelevance: number; geocodeRejectedType: number };
+
+type GeocodeOptions = { types?: string[]; proximity?: LatLng | null; stats?: GeocodeStats };
+
+// Reduces a Mapbox JSON error body to its machine-readable `code` (e.g.
+// "InvalidInput") for the server log. The free-text `message` is never
+// kept: Mapbox builds some of those messages from request input (e.g.
+// `Type "{input}" is not a known type`), so it isn't safe to log. Anything
+// that isn't a short alphanumeric code is dropped.
+function safeMapboxErrorCode(rawBody: string): string | undefined {
+  try {
+    const code = JSON.parse(rawBody)?.code;
+    return typeof code === "string" && /^[A-Za-z0-9_]{1,40}$/.test(code) ? code : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function geocodeAddress(address: string, token: string, opts: GeocodeOptions = {}): Promise<LatLng | null> {
+  const typesParam = opts.types ? `&types=${opts.types.join(",")}` : "";
+  const proximityParam = opts.proximity ? `&proximity=${opts.proximity.lng},${opts.proximity.lat}` : "";
+  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?limit=1${typesParam}${proximityParam}&access_token=${token}`;
   const res = await fetchWithTimeout(url, MAPBOX_TIMEOUT_MS);
-  if (!res.ok) throw new MapboxError(res.status, await res.text());
+  if (!res.ok) throw new MapboxError(res.status, "geocoding", { mapboxCode: safeMapboxErrorCode(await res.text()) });
   const data = await res.json();
   const feature = data.features?.[0];
-  if (!feature?.center) return null;
-  if (typeof feature.relevance === "number" && feature.relevance < MIN_GEOCODE_RELEVANCE) return null;
+  // Strict: when types were requested, every one of the result's own
+  // place_type values must be among them -- a missing/empty place_type, or
+  // one that also carries a disallowed type (e.g. ["place","locality"]),
+  // is rejected rather than trusted.
+  const placeTypes = Array.isArray(feature?.place_type) ? (feature.place_type as string[]) : [];
+  const typeOk = !opts.types || (placeTypes.length > 0 && placeTypes.every((t) => opts.types!.includes(t)));
+  if (!feature?.center) {
+    if (opts.stats) opts.stats.geocodeNotFound += 1;
+    return null;
+  }
+  if (typeof feature.relevance === "number" && feature.relevance < MIN_GEOCODE_RELEVANCE) {
+    if (opts.stats) opts.stats.geocodeRejectedRelevance += 1;
+    return null;
+  }
+  if (!typeOk) {
+    if (opts.stats) opts.stats.geocodeRejectedType += 1;
+    return null;
+  }
   const [lng, lat] = feature.center;
   return { lat, lng };
 }
 
-async function fetchMatrix(points: LatLng[], token: string): Promise<{ durations: number[][]; distances: number[][] }> {
+async function fetchMatrix(points: LatLng[], token: string, requestId: string): Promise<{ durations: number[][]; distances: number[][] }> {
   const coords = points.map((p) => `${p.lng},${p.lat}`).join(";");
   const url = `https://api.mapbox.com/directions-matrix/v1/mapbox/driving/${coords}?annotations=duration,distance&access_token=${token}`;
   const res = await fetchWithTimeout(url, MAPBOX_TIMEOUT_MS);
-  if (!res.ok) throw new MapboxError(res.status, await res.text());
+  if (!res.ok) throw new MapboxError(res.status, "matrix", { mapboxCode: safeMapboxErrorCode(await res.text()) });
   const data = await res.json();
+  // Mapbox returns `null` (not an error) for any origin/destination pair it
+  // can't compute a duration/distance for. That isn't treated as a failure,
+  // but a count of null entries is logged as an early sign of an
+  // unroutable stop. Never logs which pair -- counts only.
+  const durationsFlat = ((data.durations ?? []) as (number | null)[][]).flat();
+  const distancesFlat = ((data.distances ?? []) as (number | null)[][]).flat();
+  const nullDurations = durationsFlat.filter((v) => v == null).length;
+  const nullDistances = distancesFlat.filter((v) => v == null).length;
+  if (nullDurations > 0 || nullDistances > 0) {
+    log({ diagnostic: true, requestId, endpoint: "matrix", pointCount: points.length, nullDurations, nullDistances });
+  }
   return { durations: data.durations, distances: data.distances };
 }
 
@@ -123,10 +193,19 @@ async function fetchDirections(points: LatLng[], token: string): Promise<{ geome
   const coords = points.map((p) => `${p.lng},${p.lat}`).join(";");
   const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${coords}?geometries=geojson&overview=full&access_token=${token}`;
   const res = await fetchWithTimeout(url, MAPBOX_TIMEOUT_MS);
-  if (!res.ok) throw new MapboxError(res.status, await res.text());
+  if (!res.ok) throw new MapboxError(res.status, "directions", { mapboxCode: safeMapboxErrorCode(await res.text()) });
   const data = await res.json();
   const route = data.routes?.[0];
-  if (!route) throw new MapboxError(422, "No route could be calculated between these stops.");
+  if (!route) {
+    // This 422 is OUR OWN classification of a Mapbox 200-OK-but-no-routes
+    // response, not a status Mapbox returned -- syntheticStatus:true tells
+    // the two apart in the log. Mapbox's top-level `code` here is "NoRoute"
+    // (every point is on the road network but nothing connects them) or
+    // "NoSegment" (a point couldn't be matched to the road network at all).
+    throw new MapboxError(422, "directions", {
+      detail: { syntheticStatus: true, pointCount: points.length, directionsCode: safeMapboxErrorCode(JSON.stringify(data)) },
+    });
+  }
   return {
     geometry: route.geometry,
     distanceMeters: route.distance,
@@ -137,9 +216,15 @@ async function fetchDirections(points: LatLng[], token: string): Promise<{ geome
 
 class MapboxError extends Error {
   status: number;
-  constructor(status: number, message: string) {
-    super(message);
+  endpoint: string;
+  mapboxCode?: string;
+  detail?: Record<string, unknown>;
+  constructor(status: number, endpoint: string, opts: { mapboxCode?: string; detail?: Record<string, unknown> } = {}) {
+    super(`Mapbox ${endpoint} error (${status})`);
     this.status = status;
+    this.endpoint = endpoint;
+    this.mapboxCode = opts.mapboxCode;
+    this.detail = opts.detail;
   }
 }
 
@@ -189,7 +274,7 @@ async function runWithConcurrency<T>(tasks: Array<() => Promise<T>>, limit: numb
   return results;
 }
 
-type GeocodeBatchResult = { byAddress: Map<string, LatLng | null>; start: LatLng | null; end: LatLng | null };
+type GeocodeBatchResult = { byAddress: Map<string, LatLng | null>; start: LatLng | null; end: LatLng | null; stats: GeocodeStats; cityBiasApplied: boolean };
 
 // Geocodes every unique stop address plus the optional start/end location
 // in one bounded-concurrency batch (see GEOCODE_CONCURRENCY above), reused
@@ -201,12 +286,34 @@ type GeocodeBatchResult = { byAddress: Map<string, LatLng | null>; start: LatLng
 // and one of the stop addresses is still geocoded as two independent
 // lookups -- unlike stop-to-stop duplicates, which are (and always were)
 // deliberately deduplicated by address.
+//
+// When the workspace has a city, it's geocoded first, on its own (not a
+// task in the batch, never counted or returned as a stop), purely to get a
+// proximity point for the stop lookups -- see CITY_GEOCODE_TYPES. No city,
+// or a city that doesn't resolve, means no bias; stop lookups still apply
+// STOP_GEOCODE_TYPES either way. Start/end lookups are deliberately left
+// exactly as they were (no type restriction, no bias). `stats` tallies
+// unresolved outcomes per unique stop address (start/end not included).
 async function geocodeBatch(
   stops: Array<{ address: string }>,
   startLocation: string,
   endLocation: string,
+  city: string,
   token: string,
 ): Promise<GeocodeBatchResult> {
+  let cityCenter: LatLng | null = null;
+  if (city && stops.length > 0) {
+    try {
+      cityCenter = await geocodeAddress(city, token, { types: CITY_GEOCODE_TYPES });
+    } catch (err) {
+      // Same position/kind tagging as the batch below.
+      if (err instanceof MapboxError) err.detail = { ...err.detail, geocodeTaskIndex: -1, geocodeTaskKind: "city" };
+      throw err;
+    }
+  }
+  const stats: GeocodeStats = { geocodeNotFound: 0, geocodeRejectedRelevance: 0, geocodeRejectedType: 0 };
+  const stopOpts: GeocodeOptions = { types: STOP_GEOCODE_TYPES, proximity: cityCenter, stats };
+
   const uniqueAddresses = [...new Set(stops.map((s) => s.address.toLowerCase()))];
   const originalByLower = new Map(uniqueAddresses.map((lower) => [lower, stops.find((s) => s.address.toLowerCase() === lower)!.address]));
 
@@ -215,10 +322,24 @@ async function geocodeBatch(
   if (startLocation) plan.push({ kind: "start" });
   if (endLocation) plan.push({ kind: "end" });
 
-  const taskFns = plan.map((task) => {
-    if (task.kind === "stop") return () => geocodeAddress(originalByLower.get(task.key)!, token);
-    if (task.kind === "start") return () => geocodeAddress(startLocation, token);
-    return () => geocodeAddress(endLocation, token);
+  const taskFns = plan.map((task, index) => {
+    const run =
+      task.kind === "stop" ? () => geocodeAddress(originalByLower.get(task.key)!, token, stopOpts) :
+      task.kind === "start" ? () => geocodeAddress(startLocation, token) :
+      () => geocodeAddress(endLocation, token);
+    // Tags which geocode task (by position/kind only, never the address
+    // itself) threw, so a batch failure can be traced to "stop index 1 of 3"
+    // without ever logging what that stop's address is.
+    return async () => {
+      try {
+        return await run();
+      } catch (err) {
+        if (err instanceof MapboxError) {
+          err.detail = { ...err.detail, geocodeTaskIndex: index, geocodeTaskKind: task.kind };
+        }
+        throw err;
+      }
+    };
   });
 
   const results = await runWithConcurrency(taskFns, GEOCODE_CONCURRENCY);
@@ -232,7 +353,7 @@ async function geocodeBatch(
     else end = results[i];
   });
 
-  return { byAddress, start, end };
+  return { byAddress, start, end, stats, cityBiasApplied: cityCenter !== null };
 }
 
 // ---- Feasibility check -------------------------------------------------
@@ -380,7 +501,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: workspace, error: workspaceError } = await supabase
     .from("workspaces")
-    .select("id, name, display_brand, timezone, plan_tier, subscription_status, trial_ends_at")
+    .select("id, name, display_brand, timezone, city, plan_tier, subscription_status, trial_ends_at")
     .eq("id", workspaceId)
     .maybeSingle();
   if (workspaceError || !workspace) {
@@ -394,9 +515,24 @@ Deno.serve(async (req: Request) => {
   }
 
   const mapboxToken = Deno.env.get("MAPBOX_SECRET_TOKEN");
+  // Proximity bias for stop geocoding only (see geocodeBatch); "" when unset.
+  const workspaceCity = typeof workspace.city === "string" ? workspace.city.trim().slice(0, MAX_LOCATION_LENGTH) : "";
+
+  // Counts/flags only -- never addresses, coordinates, or provider text.
+  // Populated at checkpoints below and attached to this request's outcome
+  // log line (success or error). Same meaning in every line:
+  //   missingAddressCount  appointments on this date with no address
+  //   stopCount            addressed appointments sent to geocoding
+  //   resolvedCount / unresolvedCount  (plan) how those stops geocoded
+  //   geocodeNotFound / geocodeRejectedRelevance / geocodeRejectedType
+  //                        why unique stop addresses were unresolved
+  //   cityBiasApplied      whether the workspace city proximity was used
+  //   pointCount           coordinates sent to Matrix/Directions
+  const diagCounts: Record<string, number | boolean> = {};
 
   try {
     const { routeable, missingAddress } = await fetchRoutableAppointments(supabase, workspaceId, date, (workspace.timezone as string) ?? "UTC");
+    diagCounts.missingAddressCount = missingAddress.length;
 
     if (routeable.length + (startLocation ? 1 : 0) + (endLocation ? 1 : 0) > MAX_STOPS + 2) {
       return safeError(400, "route_too_large", `This route has too many stops to optimize at once (max ${MAX_STOPS}). Try a different date or split the day.`);
@@ -414,7 +550,7 @@ Deno.serve(async (req: Request) => {
       // request is unchanged (no cross-request cache exists, see the
       // Phase 12 report); only the scheduling of these independent
       // requests changed, from one-at-a-time to concurrency-capped.
-      const geocoded = await geocodeBatch(routeable, startLocation, endLocation, mapboxToken);
+      const geocoded = await geocodeBatch(routeable, startLocation, endLocation, workspaceCity, mapboxToken);
 
       const resolved: Array<{ id: string; clientName: string; address: string; startTimeMs: number; durationMinutes: number; status: string; lat: number; lng: number }> = [];
       const unresolved: Array<{ id: string; clientName: string; address: string; startTimeMs: number; status: string }> = [];
@@ -423,6 +559,13 @@ Deno.serve(async (req: Request) => {
         if (coords) resolved.push({ ...r, ...coords });
         else unresolved.push({ id: r.id, clientName: r.clientName, address: r.address, startTimeMs: r.startTimeMs, status: r.status });
       }
+      Object.assign(diagCounts, {
+        stopCount: routeable.length,
+        resolvedCount: resolved.length,
+        unresolvedCount: unresolved.length,
+        ...geocoded.stats,
+        cityBiasApplied: geocoded.cityBiasApplied,
+      });
 
       const startCoords = geocoded.start;
       const startUnresolved = Boolean(startLocation) && !startCoords;
@@ -435,7 +578,8 @@ Deno.serve(async (req: Request) => {
       let matrix = null;
       if (resolved.length > 0) {
         const points: LatLng[] = [...(startCoords ? [startCoords] : []), ...resolved.map((r) => ({ lat: r.lat, lng: r.lng })), ...(endCoords ? [endCoords] : [])];
-        matrix = points.length >= 2 ? await fetchMatrix(points, mapboxToken) : null;
+        diagCounts.pointCount = points.length;
+        matrix = points.length >= 2 ? await fetchMatrix(points, mapboxToken, requestId) : null;
         const directions = points.length >= 2 ? await fetchDirections(points, mapboxToken) : null;
         const conflicts = directions
           ? computeConflicts(
@@ -453,7 +597,7 @@ Deno.serve(async (req: Request) => {
         };
       }
 
-      log({ requestId, userId, workspaceId, action, status: "ok", stopCount: resolved.length, latencyMs: Date.now() - startedAt });
+      log({ requestId, userId, workspaceId, action, status: "ok", latencyMs: Date.now() - startedAt, ...diagCounts });
       return jsonResponse({
         ok: true,
         workspaceName: workspace.display_brand ?? workspace.name,
@@ -492,7 +636,8 @@ Deno.serve(async (req: Request) => {
     // Same bounded-concurrency batch as `plan` above -- unique stop
     // addresses plus optional start/end, geocoded together instead of
     // sequentially.
-    const geocoded = await geocodeBatch(orderedStops, startLocation, endLocation, mapboxToken);
+    const geocoded = await geocodeBatch(orderedStops, startLocation, endLocation, workspaceCity, mapboxToken);
+    Object.assign(diagCounts, { stopCount: orderedStops.length, ...geocoded.stats, cityBiasApplied: geocoded.cityBiasApplied });
     const withCoords = orderedStops.map((r) => ({ ...r, coords: geocoded.byAddress.get(r.address.toLowerCase()) }));
     if (withCoords.some((r) => !r.coords)) {
       return safeError(422, "unresolved_in_order", "One or more stops in this order no longer resolve to a valid address. Please reload the route.");
@@ -502,6 +647,7 @@ Deno.serve(async (req: Request) => {
     const endCoords = geocoded.end;
 
     const points: LatLng[] = [...(startCoords ? [startCoords] : []), ...withCoords.map((r) => r.coords as LatLng), ...(endCoords ? [endCoords] : [])];
+    diagCounts.pointCount = points.length;
     if (points.length < 2) return safeError(400, "not_enough_stops", "At least two locations are needed to calculate a route.");
 
     const directions = await fetchDirections(points, mapboxToken);
@@ -511,7 +657,7 @@ Deno.serve(async (req: Request) => {
       startCoords ? 1 : 0,
     );
 
-    log({ requestId, userId, workspaceId, action, status: "ok", stopCount: orderedStops.length, latencyMs: Date.now() - startedAt });
+    log({ requestId, userId, workspaceId, action, status: "ok", latencyMs: Date.now() - startedAt, ...diagCounts });
     return jsonResponse({
       ok: true,
       order: requestedOrder,
@@ -525,7 +671,19 @@ Deno.serve(async (req: Request) => {
     let status = 502;
     let message = "The route planner is temporarily unavailable. Please try again in a moment.";
 
+    // Provider error context for the server-side log only, never returned to
+    // the client: which Mapbox endpoint failed, its HTTP status, its
+    // machine-readable error code, and (via `detail`) the failing geocode
+    // task's position/kind or the synthetic no-route classification.
+    let mapboxDiagnostic: Record<string, unknown> = {};
+
     if (err instanceof MapboxError) {
+      mapboxDiagnostic = {
+        mapboxEndpoint: err.endpoint,
+        mapboxHttpStatus: err.status,
+        mapboxCode: err.mapboxCode,
+        ...err.detail,
+      };
       if (err.status === 401 || err.status === 403) {
         category = "provider_auth";
         status = 503;
@@ -550,7 +708,7 @@ Deno.serve(async (req: Request) => {
       message = "Couldn't load appointments for this route. Please try again.";
     }
 
-    log({ requestId, userId, workspaceId, action, status: "error", providerErrorCategory: category, latencyMs: Date.now() - startedAt });
+    log({ requestId, userId, workspaceId, action, status: "error", providerErrorCategory: category, latencyMs: Date.now() - startedAt, ...diagCounts, ...mapboxDiagnostic });
     return safeError(status, category, message);
   }
 });
