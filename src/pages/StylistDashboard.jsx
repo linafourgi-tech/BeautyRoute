@@ -15,7 +15,7 @@ import { ErrorState } from "../components/ErrorState";
 import "../styles/beautyroute/styles.css";
 
 // Design migration (Phase 2, design-system-dashboard-shell): reworked to
-// match the Claude Design "Professional Dashboard" reference's Overview
+// match the approved design reference's "Professional Dashboard" Overview
 // page (project cd3127fb-33c9-4e08-a9c0-448004aebd5a,
 // ui_kits/professional-dashboard/DashboardViews.jsx) -- a compact 4-up
 // stat-card grid plus a "Today" bookings list, instead of Phase 1's larger
