@@ -4,8 +4,8 @@ import { MemoryRouter, Routes, Route } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
 
 // Safety net (Phase 1 design migration; extended in Phase 2 for the
-// mobile drawer and logout added while matching the Claude Design
-// "Professional Dashboard" reference). These tests lock in the
+// mobile drawer and logout added while matching the approved design
+// reference, "Professional Dashboard"). These tests lock in the
 // behavioral contract -- routes, bilingual labels, active-state, workspace
 // switching, account display, mobile navigation, sign-out -- across both
 // the Phase 1 beautyroute-ds reskin and the Phase 2 density/dark-theme
