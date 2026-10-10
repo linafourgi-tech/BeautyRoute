@@ -116,7 +116,7 @@ describe("Layout", () => {
     expect(screen.queryByText(/trial has ended/)).not.toBeInTheDocument();
   });
 
-  it("opts the authenticated shell into the dark beautyroute-ds theme (Phase 2: matches the Claude Design reference) -- Login/Signup are untouched by this, they don't render Layout", () => {
+  it("opts the authenticated shell into the dark beautyroute-ds theme (Phase 2: matches the approved design reference) -- Login/Signup are untouched by this, they don't render Layout", () => {
     const { container } = renderLayout();
     const root = container.firstChild;
     expect(root).toHaveClass("beautyroute-ds");
