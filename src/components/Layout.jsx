@@ -5,7 +5,7 @@ import { useAppLang } from "../hooks/useAppLang";
 import "../styles/beautyroute/styles.css";
 
 // Design migration (Phase 2, design-system-dashboard-shell): reworked to
-// match the Claude Design "Professional Dashboard" reference (project
+// match the approved design reference ("Professional Dashboard", project
 // cd3127fb-33c9-4e08-a9c0-448004aebd5a) -- a dark, compact, OLED-friendly
 // application shell. This is the SAME beautyroute-ds token system as
 // Login/Signup (same colors.css, same Fraunces/Inter pair) -- just opted
