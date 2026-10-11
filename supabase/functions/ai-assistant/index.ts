@@ -42,7 +42,28 @@ const RECENT_VISITS_LIMIT = 10;
 const RATE_LIMIT_WINDOW_SECONDS = 10 * 60;
 const RATE_LIMIT_MAX_REQUESTS = 20;
 
-const SYSTEM_PROMPT = `You are the BeautyRoute AI Assistant, a professional assistant for independent beauty professionals and salons using the BeautyRoute app.
+// The response language follows the workspace's configured language
+// (workspaces.locale, set by Sidebar's language switch) -- read server-side
+// from the caller's RLS-scoped workspace row, never from the request body.
+// Same rule as src/lib/locale.js resolveWorkspaceLang(): "ar" or a regional
+// Arabic tag ("ar-SA") -> Arabic; anything else (missing, invalid, "en",
+// "en-SA") -> English. Only ever selects one of the fixed rules below -- the
+// raw locale string never reaches the prompt.
+type ResponseLanguage = "en" | "ar";
+
+function resolveResponseLanguage(locale: unknown): ResponseLanguage {
+  const value = typeof locale === "string" ? locale.trim().toLowerCase() : "";
+  return value === "ar" || value.startsWith("ar-") ? "ar" : "en";
+}
+
+const LANGUAGE_RULES: Record<ResponseLanguage, string> = {
+  en: "Respond in English -- the workspace's configured language -- even if the professional writes in another language.",
+  ar: "Respond in Modern Standard Arabic -- the workspace's configured language -- even if the professional writes in another language. Write any headings in Arabic. Keep client names, service names, product names, and dates exactly as they appear in the supplied data.",
+};
+
+// Every rule except #8 (language) is identical for both languages.
+function systemPrompt(language: ResponseLanguage): string {
+  return `You are the BeautyRoute AI Assistant, a professional assistant for independent beauty professionals and salons using the BeautyRoute app.
 
 Hard rules -- follow all of them:
 1. Rely ONLY on the structured context and tool results you are given in this request. Never use outside knowledge about a specific client, appointment, or business.
@@ -52,9 +73,10 @@ Hard rules -- follow all of them:
 5. You are not a medical professional. Never diagnose a skin, hair, scalp, or other health condition, and never recommend a medical treatment. Aftercare guidance must stay general and practical.
 6. Never state that a recommendation or outcome is guaranteed. Use language like "may help" or "consider," not "will."
 7. You cannot create, update, cancel, or delete any appointment, client, service, visit, or formula, and you cannot send messages on the professional's behalf. If asked to do one of these, say you can't perform actions -- only look up and summarize information.
-8. Respond in English only.
+8. ${LANGUAGE_RULES[language]}
 9. Keep responses practical, concise, and professional -- this is a business tool, not a casual chatbot.
 10. Do not analyze, describe, or reference any photos -- photo analysis is not available.`;
+}
 
 const ACTION_INSTRUCTIONS: Record<string, string> = {
   client_summary:
@@ -367,9 +389,10 @@ Deno.serve(async (req: Request) => {
   // plan_tier/subscription_status/trial_ends_at are read here too, straight
   // from the row the caller is RLS-permitted to see -- never from the
   // request body -- so the plan check below can't be spoofed by the browser.
+  // locale likewise decides the response language (see systemPrompt()).
   const { data: workspace, error: workspaceError } = await supabase
     .from("workspaces")
-    .select("id, name, display_brand, timezone, plan_tier, subscription_status, trial_ends_at")
+    .select("id, name, display_brand, timezone, locale, plan_tier, subscription_status, trial_ends_at")
     .eq("id", workspaceId)
     .maybeSingle();
   if (workspaceError || !workspace) {
@@ -388,6 +411,8 @@ Deno.serve(async (req: Request) => {
     log({ requestId, userId, workspaceId, action, status: "feature_not_available" });
     return safeError(403, "feature_not_available", "AI Assistant is not available on this workspace plan.");
   }
+
+  const system = systemPrompt(resolveResponseLanguage(workspace.locale));
 
   try {
     let contextText = "";
@@ -486,7 +511,7 @@ Deno.serve(async (req: Request) => {
         {
           model: MODEL,
           max_tokens: MAX_OUTPUT_TOKENS,
-          system: SYSTEM_PROMPT,
+          system,
           thinking: { type: "adaptive" },
           output_config: { effort: "medium" },
           messages: [{ role: "user", content: userTurn }],
@@ -515,7 +540,7 @@ Deno.serve(async (req: Request) => {
         {
           model: MODEL,
           max_tokens: MAX_OUTPUT_TOKENS,
-          system: SYSTEM_PROMPT,
+          system,
           thinking: { type: "adaptive" },
           output_config: { effort: "medium" },
           tools: CHAT_TOOLS,

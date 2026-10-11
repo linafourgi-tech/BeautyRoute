@@ -154,7 +154,12 @@ export default function AIEngine() {
 
               {messages.map((m, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
+                  {/* dir="auto": each bubble takes its text direction from its own
+                      content, so an Arabic reply reads right-to-left (and an English
+                      name or question inside an Arabic workspace stays left-to-right)
+                      regardless of the page's direction. Bubble placement is unchanged. */}
                   <div
+                    dir="auto"
                     style={{
                       maxWidth: "85%",
                       borderRadius: "var(--radius-lg)",
