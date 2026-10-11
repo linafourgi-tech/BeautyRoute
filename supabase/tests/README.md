@@ -17,6 +17,21 @@ structural guarantee, not just a check).
   its own two fake users/workspaces/clients inside one transaction, then
   unconditionally `ROLLBACK`s at the end — nothing persists, safe to run
   repeatedly, no separate cleanup step.
+- `workspace_protected_columns.sql` — proves the S1 fix
+  (`20261011120000_restrict_workspace_protected_columns.sql`): an
+  authenticated member is refused (`42501`) when updating `plan_tier`,
+  `subscription_status`, `trial_ends_at`, `trial_started_at`, `owner_id`,
+  `id`, `slug`, or `created_at` — including mixed updates and the
+  `ON CONFLICT DO UPDATE` upsert path — while the 8 allowed columns still
+  update; a non-member affects 0 rows; `anon` is refused; `service_role`
+  can still change plan fields; and onboarding
+  (`bootstrap_professional_workspace()`) still creates a trial workspace.
+  Same self-contained, always-`ROLLBACK` pattern.
+
+Both run via `npm run test:rls:local`. After an approved production
+deployment, `scripts/verify-workspace-protected-columns.sql` is the matching
+**read-only** check of the deployed privileges (see its header for how to
+run it).
 
 ## Prerequisites
 
