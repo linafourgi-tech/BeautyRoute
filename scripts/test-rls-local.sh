@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Real local-Postgres RLS integration test runner. LOCAL ONLY.
 #
-# Runs supabase/tests/rls_workspace_isolation.sql against the local
-# Supabase Postgres container by name, via `docker exec`. This is a
+# Runs every real-Postgres test in supabase/tests/ listed in SQL_FILES below
+# against the local Supabase Postgres container by name, via
+# `docker exec`. This is a
 # deliberate safety choice, not just a convenience: `docker exec` can only
 # ever reach a container already running on this machine -- there is no
 # connection string, host, or env var here that could be misconfigured or
@@ -18,7 +19,10 @@ set -euo pipefail
 PROJECT_ID="platform_salma"
 CONTAINER="supabase_db_${PROJECT_ID}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SQL_FILE="$SCRIPT_DIR/../supabase/tests/rls_workspace_isolation.sql"
+SQL_FILES=(
+  "$SCRIPT_DIR/../supabase/tests/rls_workspace_isolation.sql"
+  "$SCRIPT_DIR/../supabase/tests/workspace_protected_columns.sql"
+)
 
 RUNNING="$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null || echo false)"
 if [ "$RUNNING" != "true" ]; then
@@ -27,11 +31,15 @@ if [ "$RUNNING" != "true" ]; then
   exit 1
 fi
 
-if [ ! -f "$SQL_FILE" ]; then
-  echo "REFUSING TO RUN: $SQL_FILE not found." >&2
-  exit 1
-fi
+for SQL_FILE in "${SQL_FILES[@]}"; do
+  if [ ! -f "$SQL_FILE" ]; then
+    echo "REFUSING TO RUN: $SQL_FILE not found." >&2
+    exit 1
+  fi
+done
 
-echo "Running real-RLS workspace-isolation test inside local container: $CONTAINER"
-docker exec -i "$CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "$SQL_FILE"
-echo "PASS -- RLS workspace isolation holds (real local Postgres, real RLS policies, no mocking)."
+for SQL_FILE in "${SQL_FILES[@]}"; do
+  echo "Running $(basename "$SQL_FILE") inside local container: $CONTAINER"
+  docker exec -i "$CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "$SQL_FILE"
+done
+echo "PASS -- workspace isolation and protected workspace columns hold (real local Postgres, real grants and RLS policies, no mocking)."
