@@ -438,3 +438,195 @@ Deno.test("provider error handling: a 429 from Anthropic is mapped to provider_r
     Deno.env.delete("ANTHROPIC_API_KEY");
   }
 });
+
+// ---- Response language follows the workspace's configured locale -------------------------------------------------
+// The workspace's locale (set by Sidebar's language switch, read from the
+// caller's RLS-scoped workspace row) is authoritative: Arabic workspaces get
+// the Arabic rule even for English questions, English workspaces get the
+// English rule even for Arabic questions, and nothing in the request body
+// can change that. These tests capture the exact request sent to the
+// (stubbed) Anthropic API -- no real Anthropic call is ever made.
+
+// The system prompt exactly as it was before this change, with rule 8
+// "Respond in English only." Every other line must stay byte-identical.
+const PROMPT_BEFORE_LANGUAGE_FIX = "You are the BeautyRoute AI Assistant, a professional assistant for independent beauty professionals and salons using the BeautyRoute app.\n\nHard rules -- follow all of them:\n1. Rely ONLY on the structured context and tool results you are given in this request. Never use outside knowledge about a specific client, appointment, or business.\n2. Never invent facts: do not state or imply an allergy, medical condition, product, formula, previous service, or appointment that was not explicitly present in the supplied data.\n3. If the supplied data is missing or insufficient to answer confidently, say so plainly instead of guessing.\n4. Clearly distinguish established facts (from the data) from your own suggestions or observations. Label suggestions/observations as such.\n5. You are not a medical professional. Never diagnose a skin, hair, scalp, or other health condition, and never recommend a medical treatment. Aftercare guidance must stay general and practical.\n6. Never state that a recommendation or outcome is guaranteed. Use language like \"may help\" or \"consider,\" not \"will.\"\n7. You cannot create, update, cancel, or delete any appointment, client, service, visit, or formula, and you cannot send messages on the professional's behalf. If asked to do one of these, say you can't perform actions -- only look up and summarize information.\n8. Respond in English only.\n9. Keep responses practical, concise, and professional -- this is a business tool, not a casual chatbot.\n10. Do not analyze, describe, or reference any photos -- photo analysis is not available.";
+const ENGLISH_RULE = "Respond in English -- the workspace's configured language -- even if the professional writes in another language.";
+const ARABIC_RULE = "Respond in Modern Standard Arabic -- the workspace's configured language -- even if the professional writes in another language. Write any headings in Arabic. Keep client names, service names, product names, and dates exactly as they appear in the supplied data.";
+const expectedPrompt = (rule: string) => PROMPT_BEFORE_LANGUAGE_FIX.replace("8. Respond in English only.", `8. ${rule}`);
+
+function anthropicMessage(content: unknown[], stopReason: "end_turn" | "tool_use" = "end_turn") {
+  return jsonRes({
+    id: "msg_test",
+    type: "message",
+    role: "assistant",
+    model: "claude-opus-4-8",
+    content,
+    stop_reason: stopReason,
+    stop_sequence: null,
+    usage: { input_tokens: 10, output_tokens: 5 },
+  });
+}
+const textReply = (text: string) => anthropicMessage([{ type: "text", text }]);
+
+type AnthropicRequest = { system: string; messages: { role: string; content: unknown }[]; model: string };
+
+// Drives fetch directly: routes Supabase/Auth calls to fixtures and records
+// every Anthropic request body. `workspaceOverrides` undefined = no locale
+// column value at all (the fixture's default).
+function languageHarness(opts: { workspaceOverrides?: Record<string, unknown>; anthropic?: (callIndex: number) => Response }) {
+  const anthropicRequests: AnthropicRequest[] = [];
+  const workspaceQueryUrls: string[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = input instanceof Request ? input.url : input.toString();
+    if (url.includes("api.anthropic.com")) {
+      const raw = input instanceof Request ? await input.text() : typeof init?.body === "string" ? init.body : await new Response(init?.body).text();
+      anthropicRequests.push(JSON.parse(raw));
+      return (opts.anthropic ?? (() => textReply("ok")))(anthropicRequests.length - 1);
+    }
+    if (url.includes("/auth/v1/user")) return authUserResponse("user-language-check");
+    if (url.includes("/rest/v1/rpc/check_rate_limit")) return jsonRes(true);
+    if (url.includes("/rest/v1/workspaces")) {
+      workspaceQueryUrls.push(decodeURIComponent(url));
+      return jsonRes([workspaceRow(opts.workspaceOverrides ?? {})]);
+    }
+    if (url.includes("/rest/v1/clients")) {
+      return jsonRes([{ id: FAKE_CLIENT_ID, full_name: "Noura Al-Harbi", tier: "Gold", allergies: [], internal_notes: null, created_at: "2026-01-01T00:00:00Z", last_visit_at: null, workspace_id: FAKE_WORKSPACE_ID }]);
+    }
+    if (url.includes("/rest/v1/appointments")) return jsonRes([]);
+    if (url.includes("/rest/v1/services")) return jsonRes([]);
+    if (url.includes("/rest/v1/visits")) {
+      return jsonRes([{
+        id: FAKE_VISIT_ID, visit_date: "2026-07-01", summary_notes: "Balayage refresh", formula_data: null, products_used: null, workspace_id: FAKE_WORKSPACE_ID,
+        appointments: { appointment_services: [{ services: { name: "Balayage", category: "hair" } }] },
+      }]);
+    }
+    throw new Error(`Unmocked fetch in language test: ${url}`);
+  }) as typeof fetch;
+  return { anthropicRequests, workspaceQueryUrls, restore: () => { globalThis.fetch = original; } };
+}
+
+const ACTION_BODIES: Record<string, Record<string, unknown>> = {
+  chat: { action: "chat", workspaceId: FAKE_WORKSPACE_ID, message: "Which clients haven't come back recently?" },
+  client_summary: { action: "client_summary", workspaceId: FAKE_WORKSPACE_ID, clientId: FAKE_CLIENT_ID },
+  next_visit: { action: "next_visit", workspaceId: FAKE_WORKSPACE_ID, clientId: FAKE_CLIENT_ID },
+  aftercare: { action: "aftercare", workspaceId: FAKE_WORKSPACE_ID, visitId: FAKE_VISIT_ID },
+};
+
+async function runWithLocale(locale: unknown, body: Record<string, unknown>, anthropic?: (callIndex: number) => Response) {
+  Deno.env.set("ANTHROPIC_API_KEY", "fake-anthropic-key");
+  const h = languageHarness({ workspaceOverrides: locale === undefined ? undefined : { locale }, anthropic });
+  try {
+    const res = await handler(postRequest(FUNCTION_URL, body, authHeader()));
+    return { res, json: await res.json(), ...h };
+  } finally {
+    h.restore();
+    Deno.env.delete("ANTHROPIC_API_KEY");
+  }
+}
+
+for (const action of Object.keys(ACTION_BODIES)) {
+  Deno.test(`language: ${action} in an Arabic workspace ('ar') sends the Arabic rule and no English-only rule`, async () => {
+    const { res, json, anthropicRequests } = await runWithLocale("ar", ACTION_BODIES[action], () => textReply("مرحبا"));
+    assertEquals(res.status, 200);
+    assertObjectMatch(json, { ok: true, text: "مرحبا" });
+    assertEquals(anthropicRequests.length, 1);
+    assertEquals(anthropicRequests[0].system, expectedPrompt(ARABIC_RULE));
+    assertEquals(anthropicRequests[0].system.includes("English only"), false);
+  });
+
+  Deno.test(`language: ${action} in an English workspace ('en') sends the English rule`, async () => {
+    const { res, anthropicRequests } = await runWithLocale("en", ACTION_BODIES[action]);
+    assertEquals(res.status, 200);
+    assertEquals(anthropicRequests.length, 1);
+    assertEquals(anthropicRequests[0].system, expectedPrompt(ENGLISH_RULE));
+  });
+}
+
+for (const [label, locale, rule] of [
+  ["regional Arabic tag 'ar-SA'", "ar-SA", ARABIC_RULE],
+  ["regional Arabic tag, mixed case and spaces ' AR-sa '", " AR-sa ", ARABIC_RULE],
+  ["the column default 'en-SA'", "en-SA", ENGLISH_RULE],
+  ["no locale on the row", undefined, ENGLISH_RULE],
+  ["null locale", null, ENGLISH_RULE],
+  ["an unsupported locale 'fr'", "fr", ENGLISH_RULE],
+  ["a near-miss 'arabic' (not an 'ar' tag)", "arabic", ENGLISH_RULE],
+  ["a non-string locale", 42, ENGLISH_RULE],
+] as Array<[string, unknown, string]>) {
+  Deno.test(`language: ${label} resolves to the ${rule === ARABIC_RULE ? "Arabic" : "English"} rule`, async () => {
+    const { anthropicRequests } = await runWithLocale(locale, ACTION_BODIES.chat);
+    assertEquals(anthropicRequests[0].system, expectedPrompt(rule));
+  });
+}
+
+for (const [label, locale, message, rule] of [
+  ["Arabic workspace, English question", "ar", "Which clients haven't come back recently?", ARABIC_RULE],
+  ["English workspace, Arabic question", "en", "من هم العملاء الذين لم يعودوا مؤخرا؟", ENGLISH_RULE],
+  ["Arabic workspace, mixed Arabic/English question", "ar", "ما هي مواعيد اليوم for Balayage؟", ARABIC_RULE],
+  ["English workspace, mixed English/Arabic question", "en", "What did نورة book last time?", ENGLISH_RULE],
+] as Array<[string, string, string, string]>) {
+  Deno.test(`language: mixed-language message -- ${label} -- the workspace locale wins and the question is passed through unchanged`, async () => {
+    const { anthropicRequests } = await runWithLocale(locale, { action: "chat", workspaceId: FAKE_WORKSPACE_ID, message });
+    assertEquals(anthropicRequests[0].system, expectedPrompt(rule));
+    const lastUserTurn = anthropicRequests[0].messages.at(-1)!;
+    assertEquals(lastUserTurn.role, "user");
+    assertEquals(String(lastUserTurn.content).endsWith(message), true);
+  });
+}
+
+Deno.test("language: the client cannot override the workspace locale through the request body", async () => {
+  const overrideAttempt = { locale: "en", lang: "en", language: "English", responseLanguage: "en" };
+  const ar = await runWithLocale("ar", { ...ACTION_BODIES.chat, ...overrideAttempt });
+  assertEquals(ar.anthropicRequests[0].system, expectedPrompt(ARABIC_RULE));
+
+  const en = await runWithLocale("en", { ...ACTION_BODIES.chat, locale: "ar", lang: "ar", language: "Arabic" });
+  assertEquals(en.anthropicRequests[0].system, expectedPrompt(ENGLISH_RULE));
+});
+
+Deno.test("language: every call in the chat tool loop carries the same resolved system prompt", async () => {
+  const replies = [
+    anthropicMessage([{ type: "tool_use", id: "toolu_1", name: "get_todays_appointments", input: {} }], "tool_use"),
+    anthropicMessage([{ type: "tool_use", id: "toolu_2", name: "get_inactive_services", input: {} }], "tool_use"),
+    textReply("لا توجد مواعيد اليوم."),
+  ];
+  const { res, json, anthropicRequests } = await runWithLocale("ar", ACTION_BODIES.chat, (i) => replies[i]);
+  assertEquals(res.status, 200);
+  assertObjectMatch(json, { ok: true, text: "لا توجد مواعيد اليوم." });
+  assertEquals(anthropicRequests.length, 3);
+  for (const request of anthropicRequests) {
+    assertEquals(request.system, expectedPrompt(ARABIC_RULE));
+  }
+  // Sanity: the loop really did run the tools between calls.
+  assertEquals(anthropicRequests[2].messages.length, 5);
+});
+
+Deno.test("language: the workspace query selects locale from the RLS-scoped row (alongside the plan fields)", async () => {
+  const { workspaceQueryUrls } = await runWithLocale("ar", ACTION_BODIES.chat);
+  assertEquals(workspaceQueryUrls.length, 1);
+  const select = new URL(workspaceQueryUrls[0]).searchParams.get("select")!.split(",");
+  for (const column of ["id", "timezone", "locale", "plan_tier", "subscription_status", "trial_ends_at"]) {
+    assertEquals(select.includes(column), true, `workspace select is missing ${column}`);
+  }
+});
+
+Deno.test("language: every system-prompt rule other than #8 is byte-identical to before, for both languages", async () => {
+  const en = await runWithLocale("en", ACTION_BODIES.chat);
+  const ar = await runWithLocale("ar", ACTION_BODIES.chat);
+  const before = PROMPT_BEFORE_LANGUAGE_FIX.split("\n");
+  for (const prompt of [en.anthropicRequests[0].system, ar.anthropicRequests[0].system]) {
+    const lines = prompt.split("\n");
+    assertEquals(lines.length, before.length);
+    lines.forEach((line, i) => {
+      if (before[i].startsWith("8. ")) {
+        assertEquals(line.startsWith("8. Respond in "), true);
+      } else {
+        assertEquals(line, before[i], `system prompt line ${i + 1} changed`);
+      }
+    });
+  }
+  // Only rule 8 differs between the two languages.
+  const enLines = en.anthropicRequests[0].system.split("\n");
+  const arLines = ar.anthropicRequests[0].system.split("\n");
+  const differing = enLines.map((line, i) => (line === arLines[i] ? null : i)).filter((i) => i !== null);
+  assertEquals(differing.map((i) => enLines[i as number].slice(0, 3)), ["8. "]);
+});
