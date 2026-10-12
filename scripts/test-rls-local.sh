@@ -23,6 +23,7 @@ SQL_FILES=(
   "$SCRIPT_DIR/../supabase/tests/rls_workspace_isolation.sql"
   "$SCRIPT_DIR/../supabase/tests/workspace_protected_columns.sql"
   "$SCRIPT_DIR/../supabase/tests/workspace_direct_delete.sql"
+  "$SCRIPT_DIR/../supabase/tests/workspace_deletion_flow.sql"
 )
 
 RUNNING="$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null || echo false)"
@@ -41,6 +42,8 @@ done
 
 for SQL_FILE in "${SQL_FILES[@]}"; do
   echo "Running $(basename "$SQL_FILE") inside local container: $CONTAINER"
-  docker exec -i "$CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "$SQL_FILE"
+  # beautyroute.local_rls_test=on is the session setting local-only test
+  # files check before doing anything (see workspace_deletion_flow.sql).
+  docker exec -i -e PGOPTIONS='-c beautyroute.local_rls_test=on' "$CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "$SQL_FILE"
 done
-echo "PASS -- workspace isolation, protected workspace columns, and direct-delete restrictions hold (real local Postgres, real grants and RLS policies, no mocking)."
+echo "PASS -- workspace isolation, protected workspace columns, direct-delete restrictions, and the authorized deletion flow hold (real local Postgres, real grants and RLS policies, no mocking)."

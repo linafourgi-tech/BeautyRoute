@@ -37,8 +37,22 @@ structural guarantee, not just a check).
   every audit row (`workspace_id` set to `NULL`); `service_role` can still
   delete directly; and the RLS policy, the 13 `ON DELETE CASCADE` foreign
   keys, and the S1 grants are unchanged. Same always-`ROLLBACK` pattern.
+- `workspace_deletion_flow.sql` — proves the authorized deletion flow,
+  `delete_workspace()` (`20260803120000_safe_workspace_deletion.sql`),
+  against a workspace seeded with a row in every table it clears: a
+  non-owner member, the owner of a different workspace, `anon`, and the
+  owner with a nonexistent or `NULL` id are all refused (`42501`) with every
+  row of the test workspaces (and their audit history) left byte-for-byte
+  unchanged; a failure forced partway through (a test-only trigger) rolls
+  back the whole call; the owner's deletion removes all child rows,
+  preserves every audit row with `workspace_id` `NULL`, and leaves
+  profiles and a separate workspace untouched; an emptied workspace can be
+  deleted; the owner can re-onboard afterwards; and the function, its
+  grants, and the S1 / S1-b privileges are unchanged. Same
+  always-`ROLLBACK` pattern — the test-only trigger and helpers never
+  persist.
 
-All three run via `npm run test:rls:local`. After an approved production
+All four run via `npm run test:rls:local`. After an approved production
 deployment, `scripts/verify-workspace-protected-columns.sql` and
 `scripts/verify-workspace-direct-delete.sql` are the matching **read-only**
 checks of the deployed privileges (see their headers for how to run them).
