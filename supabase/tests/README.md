@@ -27,11 +27,21 @@ structural guarantee, not just a check).
   can still change plan fields; and onboarding
   (`bootstrap_professional_workspace()`) still creates a trial workspace.
   Same self-contained, always-`ROLLBACK` pattern.
+- `workspace_direct_delete.sql` — proves the S1-b fix
+  (`20261012120000_restrict_workspace_direct_delete.sql`): the owner, a
+  non-owner member, an outsider, and `anon` are all refused (`42501`) for a
+  direct `DELETE` on `workspaces` — including an "emptied" workspace whose
+  direct deletion would otherwise cascade away its audit logs; a non-owner
+  and `anon` are refused by `delete_workspace()`'s owner check; the owner's
+  `delete_workspace()` removes the workspace and its data while preserving
+  every audit row (`workspace_id` set to `NULL`); `service_role` can still
+  delete directly; and the RLS policy, the 13 `ON DELETE CASCADE` foreign
+  keys, and the S1 grants are unchanged. Same always-`ROLLBACK` pattern.
 
-Both run via `npm run test:rls:local`. After an approved production
-deployment, `scripts/verify-workspace-protected-columns.sql` is the matching
-**read-only** check of the deployed privileges (see its header for how to
-run it).
+All three run via `npm run test:rls:local`. After an approved production
+deployment, `scripts/verify-workspace-protected-columns.sql` and
+`scripts/verify-workspace-direct-delete.sql` are the matching **read-only**
+checks of the deployed privileges (see their headers for how to run them).
 
 ## Prerequisites
 

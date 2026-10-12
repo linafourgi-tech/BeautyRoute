@@ -1,0 +1,24 @@
+-- S1-b (production-readiness audit): workspace rows must only be deleted
+-- through public.delete_workspace(), never by a direct DELETE.
+--
+-- Root cause: the baseline grants (20260722092124_name_of_your_migration.sql,
+-- GRANT ALL ON TABLE "public"."workspaces" TO anon/authenticated) include
+-- DELETE, and the only policy, "workspace_access" (FOR ALL USING
+-- is_workspace_member(id)), lets any active member delete their own
+-- workspace row. Every foreign key referencing workspaces is ON DELETE
+-- CASCADE -- including audit_logs -- so a direct DELETE of a workspace with
+-- no remaining clients/services/appointments/visits bypasses
+-- delete_workspace()'s owner check and permanently erases its audit
+-- history (delete_workspace() instead detaches audit rows by setting
+-- workspace_id to NULL).
+--
+-- Fix: revoke DELETE on the table from the client roles. Unaffected by
+-- design: delete_workspace() (SECURITY DEFINER, owner postgres, owner-only),
+-- service_role and postgres. The RLS policy, foreign keys, and every other
+-- privilege on this table are unchanged.
+--
+-- Deliberately NOT changed here (separate, reviewed decisions): TRUNCATE
+-- (not reachable through the Supabase API), the S1 column-level UPDATE
+-- grants, INSERT, and EXECUTE on delete_workspace().
+REVOKE DELETE ON TABLE "public"."workspaces" FROM "authenticated";
+REVOKE DELETE ON TABLE "public"."workspaces" FROM "anon";
