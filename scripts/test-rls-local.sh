@@ -22,6 +22,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SQL_FILES=(
   "$SCRIPT_DIR/../supabase/tests/rls_workspace_isolation.sql"
   "$SCRIPT_DIR/../supabase/tests/workspace_protected_columns.sql"
+  "$SCRIPT_DIR/../supabase/tests/workspace_direct_delete.sql"
 )
 
 RUNNING="$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null || echo false)"
@@ -42,4 +43,4 @@ for SQL_FILE in "${SQL_FILES[@]}"; do
   echo "Running $(basename "$SQL_FILE") inside local container: $CONTAINER"
   docker exec -i "$CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "$SQL_FILE"
 done
-echo "PASS -- workspace isolation and protected workspace columns hold (real local Postgres, real grants and RLS policies, no mocking)."
+echo "PASS -- workspace isolation, protected workspace columns, and direct-delete restrictions hold (real local Postgres, real grants and RLS policies, no mocking)."
