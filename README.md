@@ -267,11 +267,13 @@ linked remote project, or `supabase db reset` for a local one). In order:
 14. `20260803130000_revoke_dev_workspace_membership.sql`
 15. `20260803140000_durable_rate_limiting.sql`
 16. `20261011120000_restrict_workspace_protected_columns.sql`
+17. `20261012120000_restrict_workspace_direct_delete.sql`
 
-Three additional files in this directory —
+Four additional files in this directory —
 `20260803120000_safe_workspace_deletion.test.ts`,
-`20260803140000_durable_rate_limiting.test.ts`, and
-`20261011120000_restrict_workspace_protected_columns.test.ts` — are
+`20260803140000_durable_rate_limiting.test.ts`,
+`20261011120000_restrict_workspace_protected_columns.test.ts`, and
+`20261012120000_restrict_workspace_direct_delete.test.ts` — are
 **Vitest structural tests for their matching migration, not migrations
 themselves** (they run in CI's frontend job); the Supabase CLI only applies
 `.sql` files.
