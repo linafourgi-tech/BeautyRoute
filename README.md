@@ -465,13 +465,18 @@ also produced this README rewrite; `src/data/mockData.js` was trimmed from
   `subscription_status` are not yet kept in sync by real billing events.
 - **BR-FS-001 has no implementation** (see Section 19).
 - **Client Portal and Salon Engine are not wired to real data** (Section 16).
-- **Real-Postgres RLS integration coverage is minimal, not a full tier.**
-  One real test exists and passes — `supabase/tests/rls_workspace_isolation.sql`
-  (`npm run test:rls:local`), proving workspace isolation on the `clients`
-  table against a real local Postgres instance with the real RLS policies
-  applied. Every other RLS-protected table is still only covered by
-  mocked-boundary Vitest/Deno tests, and this test is not wired into CI
-  (no local Postgres/Docker in the CI environment, by design). See
+- **Real-Postgres RLS integration coverage is targeted, not a full tier.**
+  Four local tests in `supabase/tests/` (`npm run test:rls:local`) run
+  against a real local Postgres instance with the real migrations, grants,
+  and RLS policies applied: workspace isolation on the `clients` table
+  (`rls_workspace_isolation.sql`), the protected `workspaces` columns
+  (`workspace_protected_columns.sql`), the restriction on direct
+  `workspaces` deletes (`workspace_direct_delete.sql`), and the
+  owner-only `delete_workspace()` flow (`workspace_deletion_flow.sql`),
+  which also exercises cleanup of the workspace's child tables. The RLS
+  access rules of every other table are still only covered by
+  mocked-boundary Vitest/Deno tests, and these tests are not wired into
+  CI (no local Postgres/Docker in the CI environment, by design). See
   `supabase/tests/README.md`, `docs/testing/PHASE_15_FINAL_REPORT.md`, and
   `docs/testing/TEST_STRATEGY.md`.
 - **No end-to-end (Playwright) tests exist yet.**
