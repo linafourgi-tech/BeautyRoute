@@ -269,13 +269,15 @@ linked remote project, or `supabase db reset` for a local one). In order:
 16. `20261011120000_restrict_workspace_protected_columns.sql`
 17. `20261012120000_restrict_workspace_direct_delete.sql`
 18. `20261013120000_restrict_import_service_templates.sql`
+19. `20261014120000_restrict_storage_objects.sql`
 
-Five additional files in this directory —
+Six additional files in this directory —
 `20260803120000_safe_workspace_deletion.test.ts`,
 `20260803140000_durable_rate_limiting.test.ts`,
 `20261011120000_restrict_workspace_protected_columns.test.ts`,
-`20261012120000_restrict_workspace_direct_delete.test.ts`, and
-`20261013120000_restrict_import_service_templates.test.ts` — are
+`20261012120000_restrict_workspace_direct_delete.test.ts`,
+`20261013120000_restrict_import_service_templates.test.ts`, and
+`20261014120000_restrict_storage_objects.test.ts` — are
 **Vitest structural tests for their matching migration, not migrations
 themselves** (they run in CI's frontend job); the Supabase CLI only applies
 `.sql` files.
@@ -468,15 +470,16 @@ also produced this README rewrite; `src/data/mockData.js` was trimmed from
 - **BR-FS-001 has no implementation** (see Section 19).
 - **Client Portal and Salon Engine are not wired to real data** (Section 16).
 - **Real-Postgres RLS integration coverage is targeted, not a full tier.**
-  Five local tests in `supabase/tests/` (`npm run test:rls:local`) run
+  Six local tests in `supabase/tests/` (`npm run test:rls:local`) run
   against a real local Postgres instance with the real migrations, grants,
   and RLS policies applied: workspace isolation on the `clients` table
   (`rls_workspace_isolation.sql`), the protected `workspaces` columns
   (`workspace_protected_columns.sql`), the restriction on direct
   `workspaces` deletes (`workspace_direct_delete.sql`), the owner-only
   `delete_workspace()` flow (`workspace_deletion_flow.sql`), which also
-  exercises cleanup of the workspace's child tables, and service-template
-  import authorization (`service_template_import.sql`). The RLS
+  exercises cleanup of the workspace's child tables, service-template
+  import authorization (`service_template_import.sql`), and default-deny
+  client access to Storage objects (`storage_objects_access.sql`). The RLS
   access rules of every other table are still only covered by
   mocked-boundary Vitest/Deno tests, and these tests are not wired into
   CI (no local Postgres/Docker in the CI environment, by design). See
