@@ -62,17 +62,36 @@ structural guarantee, not just a check).
   onboarding (bootstrap, then import) still works; and `EXECUTE` is held
   by `authenticated` and `service_role` only, not `anon` or `PUBLIC`.
   Same always-`ROLLBACK` pattern.
+- `storage_objects_access.sql` — proves the S3 Phase 1 fix
+  (`20261014120000_restrict_storage_objects.sql`): in each of the six
+  private buckets (`avatars`, `client-photos`, `before-after`, `documents`,
+  `receipts`, `ai-uploads`), an authenticated member (even the recorded
+  owner, in their own workspace's path), an authenticated outsider, and
+  `anon` cannot read, upload, update, or delete objects, with every object
+  left byte-for-byte unchanged; `service_role` can still do all four; row
+  level security stays enabled; and no `storage.objects` policy applies to
+  `authenticated`, `anon`, or `PUBLIC`. The buckets and objects are
+  synthetic rows created inside the transaction (the local stack defines
+  no buckets). Direct SQL deletes are blocked by Storage's own
+  `protect_delete` trigger unless `storage.allow_delete_query` is `true`
+  (what the Storage API sets), so the test sets it transaction-locally to
+  exercise the row-level-security path. It tests the PostgreSQL row level
+  security on `storage.objects` directly, as the Storage API's database
+  role would see it; it does not exercise the Storage HTTP API (uploads,
+  downloads, signed URLs) end-to-end. Same always-`ROLLBACK` pattern.
 
-`workspace_deletion_flow.sql` and `service_template_import.sql` start with a
-local-only guard: they refuse to run unless the session setting
-`beautyroute.local_rls_test` is `on`, which only the runner sets.
+`workspace_deletion_flow.sql`, `service_template_import.sql`, and
+`storage_objects_access.sql` start with a local-only guard: they refuse to
+run unless the session setting `beautyroute.local_rls_test` is `on`, which
+only the runner sets.
 
-All five run via `npm run test:rls:local`. After an approved production
+All six run via `npm run test:rls:local`. After an approved production
 deployment, `scripts/verify-workspace-protected-columns.sql`,
-`scripts/verify-workspace-direct-delete.sql`, and
-`scripts/verify-import-service-templates.sql` are the matching
-**read-only** checks of the deployed privileges (see their headers for how
-to run them).
+`scripts/verify-workspace-direct-delete.sql`,
+`scripts/verify-import-service-templates.sql`, and
+`scripts/verify-storage-objects-policies.sql` are the matching
+**read-only** checks of the deployed privileges and policies (see their
+headers for how to run them).
 
 ## Prerequisites
 
