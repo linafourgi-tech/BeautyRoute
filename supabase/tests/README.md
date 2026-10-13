@@ -51,11 +51,28 @@ structural guarantee, not just a check).
   grants, and the S1 / S1-b privileges are unchanged. Same
   always-`ROLLBACK` pattern — the test-only trigger and helpers never
   persist.
+- `service_template_import.sql` — proves the S2 fix
+  (`20261013120000_restrict_import_service_templates.sql`): an active
+  member can import templates into their workspace (audited with the
+  member as actor; deduplication by name unchanged); the owner of another
+  workspace, an inactive staff member, `anon` (at the `EXECUTE` privilege),
+  a member passing a `NULL` id, and a `service_role` call without a
+  member's `auth.uid()` are all refused (`42501`) with the victim
+  workspace's services and audit history left byte-for-byte unchanged;
+  onboarding (bootstrap, then import) still works; and `EXECUTE` is held
+  by `authenticated` and `service_role` only, not `anon` or `PUBLIC`.
+  Same always-`ROLLBACK` pattern.
 
-All four run via `npm run test:rls:local`. After an approved production
-deployment, `scripts/verify-workspace-protected-columns.sql` and
-`scripts/verify-workspace-direct-delete.sql` are the matching **read-only**
-checks of the deployed privileges (see their headers for how to run them).
+`workspace_deletion_flow.sql` and `service_template_import.sql` start with a
+local-only guard: they refuse to run unless the session setting
+`beautyroute.local_rls_test` is `on`, which only the runner sets.
+
+All five run via `npm run test:rls:local`. After an approved production
+deployment, `scripts/verify-workspace-protected-columns.sql`,
+`scripts/verify-workspace-direct-delete.sql`, and
+`scripts/verify-import-service-templates.sql` are the matching
+**read-only** checks of the deployed privileges (see their headers for how
+to run them).
 
 ## Prerequisites
 
