@@ -79,17 +79,31 @@ structural guarantee, not just a check).
   security on `storage.objects` directly, as the Storage API's database
   role would see it; it does not exercise the Storage HTTP API (uploads,
   downloads, signed URLs) end-to-end. Same always-`ROLLBACK` pattern.
+- `workspace_staff_management.sql` — proves the S4 fix
+  (`20261015120000_restrict_workspace_staff_management.sql`): active
+  members can read their workspace's staff list; a non-owner member
+  cannot add an outsider, delete or deactivate the owner, reactivate a
+  deactivated colleague, change commissions, or re-point a row; outsiders
+  and `anon` can neither read nor manage it (each refused attempt leaves
+  the staff rows byte-for-byte unchanged); the owner can add, update,
+  deactivate, reactivate, and remove other staff but cannot delete or
+  deactivate their own row or move a row to another workspace; an owner
+  whose own staff row is missing can re-add it (active only); onboarding
+  and `delete_workspace()` still work; and the policies,
+  `is_workspace_owner()`, and the column-level `UPDATE` grants are exactly
+  as reviewed. Same always-`ROLLBACK` pattern.
 
-`workspace_deletion_flow.sql`, `service_template_import.sql`, and
-`storage_objects_access.sql` start with a local-only guard: they refuse to
-run unless the session setting `beautyroute.local_rls_test` is `on`, which
-only the runner sets.
+`workspace_deletion_flow.sql`, `service_template_import.sql`,
+`storage_objects_access.sql`, and `workspace_staff_management.sql` start
+with a local-only guard: they refuse to run unless the session setting
+`beautyroute.local_rls_test` is `on`, which only the runner sets.
 
-All six run via `npm run test:rls:local`. After an approved production
+All seven run via `npm run test:rls:local`. After an approved production
 deployment, `scripts/verify-workspace-protected-columns.sql`,
 `scripts/verify-workspace-direct-delete.sql`,
-`scripts/verify-import-service-templates.sql`, and
-`scripts/verify-storage-objects-policies.sql` are the matching
+`scripts/verify-import-service-templates.sql`,
+`scripts/verify-storage-objects-policies.sql`, and
+`scripts/verify-workspace-staff-management.sql` are the matching
 **read-only** checks of the deployed privileges and policies (see their
 headers for how to run them).
 
