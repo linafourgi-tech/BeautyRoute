@@ -26,6 +26,7 @@ SQL_FILES=(
   "$SCRIPT_DIR/../supabase/tests/workspace_deletion_flow.sql"
   "$SCRIPT_DIR/../supabase/tests/service_template_import.sql"
   "$SCRIPT_DIR/../supabase/tests/storage_objects_access.sql"
+  "$SCRIPT_DIR/../supabase/tests/workspace_staff_management.sql"
 )
 
 RUNNING="$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null || echo false)"
@@ -48,4 +49,4 @@ for SQL_FILE in "${SQL_FILES[@]}"; do
   # files check before doing anything (see workspace_deletion_flow.sql).
   docker exec -i -e PGOPTIONS='-c beautyroute.local_rls_test=on' "$CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "$SQL_FILE"
 done
-echo "PASS -- workspace isolation, protected workspace columns, direct-delete restrictions, the authorized deletion flow, service-template import authorization, and Storage object access hold (real local Postgres, real grants and RLS policies, no mocking)."
+echo "PASS -- workspace isolation, protected workspace columns, direct-delete restrictions, the authorized deletion flow, service-template import authorization, Storage object access, and owner-only staff management hold (real local Postgres, real grants and RLS policies, no mocking)."
