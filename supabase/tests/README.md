@@ -92,18 +92,54 @@ structural guarantee, not just a check).
   and `delete_workspace()` still work; and the policies,
   `is_workspace_owner()`, and the column-level `UPDATE` grants are exactly
   as reviewed. Same always-`ROLLBACK` pattern.
+- `cross_workspace_references.sql` — proves the S5 fix
+  (`20261026120000_prevent_cross_workspace_references.sql`): a member of
+  workspace A, and a member of both A and B, cannot INSERT or UPDATE A's
+  rows to reference B's client, service, tag, appointment, visit, or file
+  (`appointments`, `visits`, `appointment_services`, `client_tags`,
+  `ai_history`, `revenues`, `expenses`); a member of both cannot move a
+  referenced B record into A — including a client linked only through
+  `client_tags` and an appointment linked only through
+  `appointment_services`, which only the move-side triggers can refuse;
+  B's rows stay byte-for-byte unchanged and no cross-workspace reference
+  appears; same-workspace operations, deletions, and `ON DELETE SET NULL`
+  still work; B can still delete its service, client, and workspace; the
+  11 policies and 13 triggers are exactly as reviewed (`SECURITY INVOKER`,
+  pinned `search_path`, owned by `postgres`, no client `EXECUTE`); and a
+  permanent recursion probe confirms a member can INSERT and UPDATE in all
+  11 tables without 42P17 (infinite policy recursion). Same
+  always-`ROLLBACK` pattern.
+
+Races cannot be tested inside one transaction, so the S5 fix also has a
+two-session runner, `bash scripts/test-cross-workspace-races-local.sh`
+(same `docker exec`-only local guard; not part of `npm run test:rls:local`
+because it takes several minutes). For all 10 relationships between a
+referencing table and a movable table, in both directions (a reference
+write overlapping a workspace move of the referenced row, and the
+reverse), it checks: `control` — with the 13 triggers temporarily disabled
+the race reproduces (proving the test detects it); `r1_commit` — the second
+transaction waits for the first, then is refused (42501) and nothing invalid
+commits; `r1_rollback` — it waits, then succeeds (it re-checks the
+committed state rather than refusing on contention); and `deadlock` — two
+mixed multi-statement transactions deadlock and Postgres aborts one (40P01)
+with nothing invalid committed. Its disposable fixtures (ids
+`...-000000000eXX`) are committed for the run and, with the triggers,
+restored by an `EXIT` trap even when a scenario fails or the run is
+interrupted.
 
 `workspace_deletion_flow.sql`, `service_template_import.sql`,
-`storage_objects_access.sql`, and `workspace_staff_management.sql` start
-with a local-only guard: they refuse to run unless the session setting
-`beautyroute.local_rls_test` is `on`, which only the runner sets.
+`storage_objects_access.sql`, `workspace_staff_management.sql`, and
+`cross_workspace_references.sql` start with a local-only guard: they
+refuse to run unless the session setting `beautyroute.local_rls_test` is
+`on`, which only the runner sets.
 
-All seven run via `npm run test:rls:local`. After an approved production
+All eight run via `npm run test:rls:local`. After an approved production
 deployment, `scripts/verify-workspace-protected-columns.sql`,
 `scripts/verify-workspace-direct-delete.sql`,
 `scripts/verify-import-service-templates.sql`,
-`scripts/verify-storage-objects-policies.sql`, and
-`scripts/verify-workspace-staff-management.sql` are the matching
+`scripts/verify-storage-objects-policies.sql`,
+`scripts/verify-workspace-staff-management.sql`, and
+`scripts/verify-cross-workspace-references.sql` are the matching
 **read-only** checks of the deployed privileges and policies (see their
 headers for how to run them).
 
