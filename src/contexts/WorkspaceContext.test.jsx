@@ -3,6 +3,7 @@ import { renderHook, waitFor, act } from "@testing-library/react";
 
 const getWorkspacesMock = vi.fn();
 const onAuthStateChangeMock = vi.fn();
+const getSessionMock = vi.fn();
 
 vi.mock("../services/workspaces", () => ({
   getWorkspaces: () => getWorkspacesMock(),
@@ -11,9 +12,14 @@ vi.mock("../lib/supabase", () => ({
   supabase: {
     auth: {
       onAuthStateChange: (cb) => onAuthStateChangeMock(cb),
+      getSession: () => getSessionMock(),
     },
   },
 }));
+
+function signedInAs(userId) {
+  getSessionMock.mockResolvedValue({ data: { session: { user: { id: userId } } } });
+}
 
 import { WorkspaceProvider } from "./WorkspaceContext";
 import { useWorkspaceContext } from "./useWorkspaceContext";
@@ -28,6 +34,8 @@ describe("useWorkspaceContext / WorkspaceProvider", () => {
     getWorkspacesMock.mockReset();
     onAuthStateChangeMock.mockReset();
     onAuthStateChangeMock.mockReturnValue({ data: { subscription: { unsubscribe: () => {} } } });
+    getSessionMock.mockReset();
+    getSessionMock.mockResolvedValue({ data: { session: null } });
     localStorage.clear();
   });
 
@@ -121,6 +129,93 @@ describe("useWorkspaceContext / WorkspaceProvider", () => {
     expect(result.current.workspaceId).toBe("ws-1");
   });
 
+  it("with no saved choice, defaults to the first workspace the user OWNS, not the first workspace listed", async () => {
+    signedInAs("user-1");
+    getWorkspacesMock.mockResolvedValue([
+      { id: "ws-salon", name: "Someone else's salon", owner_id: "owner-9" },
+      { id: "ws-own", name: "My business", owner_id: "user-1" },
+      { id: "ws-own-2", name: "My second", owner_id: "user-1" },
+    ]);
+
+    const { result } = renderHook(() => useWorkspaceContext(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.workspaceId).toBe("ws-own");
+  });
+
+  it("keeps a valid saved choice even when it is a workspace the user does not own", async () => {
+    signedInAs("user-1");
+    localStorage.setItem("br.selectedWorkspaceId", "ws-salon");
+    getWorkspacesMock.mockResolvedValue([
+      { id: "ws-own", name: "My business", owner_id: "user-1" },
+      { id: "ws-salon", name: "Salon I work at", owner_id: "owner-9" },
+    ]);
+
+    const { result } = renderHook(() => useWorkspaceContext(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.workspaceId).toBe("ws-salon");
+  });
+
+  it("ignores a saved choice the user no longer belongs to and falls back to an owned workspace", async () => {
+    signedInAs("user-1");
+    localStorage.setItem("br.selectedWorkspaceId", "ws-left");
+    getWorkspacesMock.mockResolvedValue([
+      { id: "ws-salon", name: "Salon", owner_id: "owner-9" },
+      { id: "ws-own", name: "My business", owner_id: "user-1" },
+    ]);
+
+    const { result } = renderHook(() => useWorkspaceContext(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.workspaceId).toBe("ws-own");
+  });
+
+  it("when the user owns none of their workspaces, defaults to the first in the service's fixed order", async () => {
+    signedInAs("user-1");
+    getWorkspacesMock.mockResolvedValue([
+      { id: "ws-a", name: "Salon A", owner_id: "owner-8" },
+      { id: "ws-b", name: "Salon B", owner_id: "owner-9" },
+    ]);
+
+    const { result } = renderHook(() => useWorkspaceContext(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.workspaceId).toBe("ws-a");
+  });
+
+  it("is deterministic: the same list and user always produce the same default, across refreshes", async () => {
+    signedInAs("user-1");
+    const list = [
+      { id: "ws-salon", name: "Salon", owner_id: "owner-9" },
+      { id: "ws-own", name: "My business", owner_id: "user-1" },
+    ];
+    getWorkspacesMock.mockResolvedValue(list);
+
+    const first = renderHook(() => useWorkspaceContext(), { wrapper });
+    await waitFor(() => expect(first.result.current.loading).toBe(false));
+    first.unmount();
+    const second = renderHook(() => useWorkspaceContext(), { wrapper });
+    await waitFor(() => expect(second.result.current.loading).toBe(false));
+
+    expect(first.result.current.workspaceId).toBe("ws-own");
+    expect(second.result.current.workspaceId).toBe("ws-own");
+  });
+
+  it("still resolves (first in order) if the session lookup fails -- the preference is never load-bearing", async () => {
+    getSessionMock.mockRejectedValue(new Error("storage unavailable"));
+    getWorkspacesMock.mockResolvedValue([
+      { id: "ws-salon", name: "Salon", owner_id: "owner-9" },
+      { id: "ws-own", name: "My business", owner_id: "user-1" },
+    ]);
+
+    const { result } = renderHook(() => useWorkspaceContext(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.workspaceId).toBe("ws-salon");
+  });
+
   it("re-fetches on auth state changes (e.g. sign-in after an initial signed-out load)", async () => {
     getWorkspacesMock.mockResolvedValue([]);
     let authCallback;
@@ -159,6 +254,8 @@ describe("useCurrentWorkspace (thin wrapper over useWorkspaceContext)", () => {
     getWorkspacesMock.mockReset();
     onAuthStateChangeMock.mockReset();
     onAuthStateChangeMock.mockReturnValue({ data: { subscription: { unsubscribe: () => {} } } });
+    getSessionMock.mockReset();
+    getSessionMock.mockResolvedValue({ data: { session: null } });
   });
 
   it("exposes the same workspace/workspaceId/loading/error/refresh shape as the context", async () => {

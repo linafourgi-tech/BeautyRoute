@@ -36,13 +36,20 @@ const UPDATABLE_WORKSPACE_FIELDS = [
 // now reads it to decide which of a nav item's two language labels to
 // display. This is not a new field or a schema change, just the first real
 // consumer of a column that previously had none.
-const WORKSPACE_LIST_COLUMNS = 'id, name, display_brand, locale'
+//
+// `owner_id` and `created_at` added (membership consent fix): WorkspaceContext
+// prefers a workspace the user owns as the default selection, and the list is
+// returned in a fixed order so that default never depends on row order.
+const WORKSPACE_LIST_COLUMNS = 'id, name, display_brand, locale, owner_id, created_at'
 
-// 1. Get all workspaces owned by the logged-in user
+// 1. Get every workspace the logged-in user is a member of (row level
+// security limits the rows), oldest first, with id as a tie-breaker.
 export async function getWorkspaces() {
   const { data, error } = await supabase
     .from('workspaces')
     .select(WORKSPACE_LIST_COLUMNS)
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
 
   if (error) throw error
   return data
