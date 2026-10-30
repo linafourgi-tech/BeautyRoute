@@ -54,10 +54,26 @@ function clientRoles(roleList: string | undefined): boolean {
   return roleList.split(",").map(unquote).some((role) => CLIENT_ROLES.has(role));
 }
 
+// A positive (not negated) is_workspace_owner() call.
+function requiresOwner(clause: string): boolean {
+  return /(?<!\bNOT\s*\(?\s*)(?:"?public"?\s*\.\s*)?"?is_workspace_owner"?\s*\(/i.test(clause);
+}
+
+// The one approved non-owner write: a member deleting their OWN row, unless
+// they own the workspace (20261029120000_require_workspace_membership_consent.sql).
+// Matched exactly (quotes, schema prefix, case, and spacing ignored), so any
+// widening of it is still a regression.
+function isSelfLeave(cmd: string, clause: string): boolean {
+  const using = /\bUSING\s*(\([\s\S]*\))\s*$/i.exec(clause)?.[1] ?? "";
+  const normalized = using.replace(/"/g, "").replace(/\bpublic\s*\./gi, "").replace(/\s+/g, "").toLowerCase();
+  return cmd === "DELETE" && normalized === "(profile_id=auth.uid()andnotis_workspace_owner(workspace_id))";
+}
+
 // Everything that would re-open S4 in a migration's text:
 //  * a write-capable policy on workspace_staff (FOR ALL/INSERT/UPDATE/DELETE,
 //    or no FOR clause) for a client role that does not require
-//    is_workspace_owner();
+//    is_workspace_owner() (a negated call does not count), other than the
+//    exact self-leave DELETE policy;
 //  * a table-wide UPDATE/ALL grant on workspace_staff to a client role, or a
 //    column grant that includes workspace_id or profile_id;
 //  * a redefinition of is_workspace_owner() that no longer checks
@@ -70,7 +86,7 @@ function s4Regressions(text: string): string[] {
       const clause = policy[2];
       const cmd = /\bFOR\s+(ALL|SELECT|INSERT|UPDATE|DELETE)\b/i.exec(clause)?.[1]?.toUpperCase() ?? "ALL";
       const roles = /\bTO\s+(.+?)(?=\bUSING\b|\bWITH\s+CHECK\b|$)/i.exec(clause)?.[1];
-      if (cmd !== "SELECT" && clientRoles(roles) && !/\bis_workspace_owner"?\s*\(/i.test(clause)) {
+      if (cmd !== "SELECT" && clientRoles(roles) && !requiresOwner(clause) && !isSelfLeave(cmd, clause)) {
         problems.push(`write policy without owner check: ${unquote(policy[1])}`);
       }
     }
@@ -148,6 +164,9 @@ describe("migration-order guard: no migration re-opens staff management to plain
     ["baseline table grant", 'GRANT ALL ON TABLE "public"."workspace_staff" TO "authenticated";'],
     ["table-wide UPDATE", "GRANT UPDATE ON public.workspace_staff TO authenticated;"],
     ["UPDATE on identity column", 'GRANT UPDATE ("is_active", "workspace_id") ON TABLE "public"."workspace_staff" TO "authenticated";'],
+    ["negated owner check only (any member deletes anyone)", "CREATE POLICY p ON public.workspace_staff FOR DELETE TO authenticated USING (NOT is_workspace_owner(workspace_id));"],
+    ["self-leave widened to any row", "CREATE POLICY p ON public.workspace_staff FOR DELETE TO authenticated USING (profile_id = auth.uid() OR NOT is_workspace_owner(workspace_id));"],
+    ["self-leave shape on UPDATE", "CREATE POLICY p ON public.workspace_staff FOR UPDATE TO authenticated USING (profile_id = auth.uid() AND NOT is_workspace_owner(workspace_id));"],
     ["owner function to anon", 'GRANT EXECUTE ON FUNCTION "public"."is_workspace_owner"("workspace" "uuid") TO "anon";'],
     [
       "owner function weakened",
@@ -159,6 +178,7 @@ describe("migration-order guard: no migration re-opens staff management to plain
     ["this migration itself", sql],
     ["member SELECT policy", "CREATE POLICY p ON public.workspace_staff FOR SELECT TO authenticated USING (is_workspace_member(workspace_id));"],
     ["owner-gated write policy", "CREATE POLICY p ON public.workspace_staff FOR DELETE TO authenticated USING (is_workspace_owner(workspace_id));"],
+    ["the approved self-leave policy", 'CREATE POLICY "workspace_staff_delete_self" ON "public"."workspace_staff" FOR DELETE TO "authenticated" USING ("profile_id" = "auth"."uid"() AND NOT "public"."is_workspace_owner"("workspace_id"));'],
     ["service_role write policy", "CREATE POLICY p ON public.workspace_staff FOR ALL TO service_role USING (true);"],
     ["column UPDATE on non-identity columns", 'GRANT UPDATE ("is_active", "base_commission_pct") ON TABLE "public"."workspace_staff" TO "authenticated";'],
     ["grant to service_role", 'GRANT ALL ON TABLE "public"."workspace_staff" TO "service_role";'],

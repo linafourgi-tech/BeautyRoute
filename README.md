@@ -272,16 +272,18 @@ linked remote project, or `supabase db reset` for a local one). In order:
 19. `20261014120000_restrict_storage_objects.sql`
 20. `20261015120000_restrict_workspace_staff_management.sql`
 21. `20261026120000_prevent_cross_workspace_references.sql`
+22. `20261029120000_require_workspace_membership_consent.sql`
 
-Eight additional files in this directory —
+Nine additional files in this directory —
 `20260803120000_safe_workspace_deletion.test.ts`,
 `20260803140000_durable_rate_limiting.test.ts`,
 `20261011120000_restrict_workspace_protected_columns.test.ts`,
 `20261012120000_restrict_workspace_direct_delete.test.ts`,
 `20261013120000_restrict_import_service_templates.test.ts`,
 `20261014120000_restrict_storage_objects.test.ts`,
-`20261015120000_restrict_workspace_staff_management.test.ts`, and
-`20261026120000_prevent_cross_workspace_references.test.ts` — are
+`20261015120000_restrict_workspace_staff_management.test.ts`,
+`20261026120000_prevent_cross_workspace_references.test.ts`, and
+`20261029120000_require_workspace_membership_consent.test.ts` — are
 **Vitest structural tests for their matching migration, not migrations
 themselves** (they run in CI's frontend job); the Supabase CLI only applies
 `.sql` files.
@@ -484,7 +486,8 @@ also produced this README rewrite; `src/data/mockData.js` was trimmed from
   exercises cleanup of the workspace's child tables, service-template
   import authorization (`service_template_import.sql`), default-deny
   client access to Storage objects (`storage_objects_access.sql`),
-  owner-only staff management (`workspace_staff_management.sql`), and
+  owner-only staff management and consent-based membership
+  (`workspace_staff_management.sql`), and
   same-workspace references (`cross_workspace_references.sql`). The RLS
   access rules of every other table are still only covered by
   mocked-boundary Vitest/Deno tests, and these tests are not wired into
