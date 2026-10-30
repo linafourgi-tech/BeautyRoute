@@ -24,6 +24,18 @@ function writeStoredId(id) {
   }
 }
 
+// The signed-in user's id, used only to prefer a workspace they own as the
+// default selection -- never for authorization (row level security decides
+// which workspaces are listed at all). Any failure just means "no preference".
+async function readCurrentUserId() {
+  try {
+    const { data } = await supabase.auth.getSession();
+    return data?.session?.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // Single source of truth for "which workspace is currently selected,"
 // shared by every page/component that used to call getWorkspaces() and pick
 // workspaces[0] independently. Switching workspace here is what lets every
@@ -47,7 +59,7 @@ export function WorkspaceProvider({ children }) {
     setLoading(true);
     setError(null);
     try {
-      const rows = await getWorkspaces();
+      const [rows, userId] = await Promise.all([getWorkspaces(), readCurrentUserId()]);
       if (!mountedRef.current) return;
       const list = rows ?? [];
       setWorkspaces(list);
@@ -60,8 +72,10 @@ export function WorkspaceProvider({ children }) {
         // workspace this user actually still belongs to.
         const stored = readStoredId();
         if (stored && list.some((w) => w.id === stored)) return stored;
-        // Otherwise the first available workspace, or none at all.
-        return list[0]?.id ?? null;
+        // Otherwise the first workspace the user owns, then the first
+        // available one (getWorkspaces() returns a fixed order), or none.
+        const owned = userId ? list.find((w) => w.owner_id === userId) : undefined;
+        return (owned ?? list[0])?.id ?? null;
       });
     } catch (err) {
       if (mountedRef.current) setError(err);
