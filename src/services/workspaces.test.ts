@@ -161,18 +161,25 @@ describe("updateWorkspaceSettings", () => {
   });
 });
 
+function buildListChain(result: { data: unknown; error: unknown }) {
+  const orderById = vi.fn().mockResolvedValue(result);
+  const orderByCreated = vi.fn(() => ({ order: orderById }));
+  const select = vi.fn(() => ({ order: orderByCreated }));
+  return { select, orderByCreated, orderById };
+}
+
 describe("getWorkspaces (Phase 13 Step 4: narrowed select)", () => {
   beforeEach(() => {
     fromMock.mockReset();
   });
 
   it("REGRESSION: requests every column current consumers actually read -- WorkspaceContext, Sidebar's workspace switcher, RouteEngine, AIEngine need only id, name, display_brand (plan/subscription fields come from a separate getSubscription() query, never this row)", async () => {
-    const select = vi.fn().mockResolvedValue({ data: [], error: null });
-    fromMock.mockReturnValue({ select });
+    const chain = buildListChain({ data: [], error: null });
+    fromMock.mockReturnValue({ select: chain.select });
 
     await getWorkspaces();
 
-    const [selectArg] = select.mock.calls[0];
+    const [selectArg] = chain.select.mock.calls[0] as unknown as [string];
     const requestedColumns = String(selectArg)
       .split(",")
       .map((c) => c.trim());
@@ -182,9 +189,21 @@ describe("getWorkspaces (Phase 13 Step 4: narrowed select)", () => {
     expect(selectArg).not.toBe("*");
   });
 
+  it("requests owner_id and returns a fixed order (created_at, then id) so the default workspace is deterministic", async () => {
+    const chain = buildListChain({ data: [], error: null });
+    fromMock.mockReturnValue({ select: chain.select });
+
+    await getWorkspaces();
+
+    const [selectArg] = chain.select.mock.calls[0] as unknown as [string];
+    expect(String(selectArg).split(",").map((c) => c.trim())).toContain("owner_id");
+    expect(chain.orderByCreated).toHaveBeenCalledWith("created_at", { ascending: true });
+    expect(chain.orderById).toHaveBeenCalledWith("id", { ascending: true });
+  });
+
   it("propagates a Supabase error instead of swallowing it", async () => {
-    const select = vi.fn().mockResolvedValue({ data: null, error: new Error("connection lost") });
-    fromMock.mockReturnValue({ select });
+    const chain = buildListChain({ data: null, error: new Error("connection lost") });
+    fromMock.mockReturnValue({ select: chain.select });
 
     await expect(getWorkspaces()).rejects.toThrow("connection lost");
   });

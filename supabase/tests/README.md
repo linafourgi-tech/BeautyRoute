@@ -80,18 +80,29 @@ structural guarantee, not just a check).
   role would see it; it does not exercise the Storage HTTP API (uploads,
   downloads, signed URLs) end-to-end. Same always-`ROLLBACK` pattern.
 - `workspace_staff_management.sql` — proves the S4 fix
-  (`20261015120000_restrict_workspace_staff_management.sql`): active
+  (`20261015120000_restrict_workspace_staff_management.sql`) and the
+  membership-consent fix
+  (`20261029120000_require_workspace_membership_consent.sql`): active
   members can read their workspace's staff list; a non-owner member
   cannot add an outsider, delete or deactivate the owner, reactivate a
   deactivated colleague, change commissions, or re-point a row; outsiders
-  and `anon` can neither read nor manage it (each refused attempt leaves
-  the staff rows byte-for-byte unchanged); the owner can add, update,
-  deactivate, reactivate, and remove other staff but cannot delete or
+  and `anon` can neither read nor manage it, and `anon` cannot call
+  `bootstrap_professional_workspace()` (each refused attempt leaves the
+  staff rows byte-for-byte unchanged); the owner cannot add another user
+  (active or inactive) without that user's consent, but can update,
+  deactivate, reactivate, and remove existing staff, and cannot delete or
   deactivate their own row or move a row to another workspace; an owner
-  whose own staff row is missing can re-add it (active only); onboarding
-  and `delete_workspace()` still work; and the policies,
-  `is_workspace_owner()`, and the column-level `UPDATE` grants are exactly
-  as reviewed. Same always-`ROLLBACK` pattern.
+  whose own staff row is missing can re-add it (active only) but cannot
+  create a second workspace; active and inactive staff of another
+  workspace can each create their own workspace once; a non-owner member
+  can leave, active or inactive (removing only their own row, even with a
+  blanket `DELETE`); an inactive member sees only their own row and no
+  workspace data, and nobody reads other workspaces' staff rows; the owner
+  cannot leave, and a member who left cannot be re-added or reactivated;
+  onboarding and `delete_workspace()` still work; and the six policies,
+  `is_workspace_owner()`, `bootstrap_professional_workspace()`,
+  and the column-level `UPDATE` grants are exactly as reviewed. Same
+  always-`ROLLBACK` pattern.
 - `cross_workspace_references.sql` — proves the S5 fix
   (`20261026120000_prevent_cross_workspace_references.sql`): a member of
   workspace A, and a member of both A and B, cannot INSERT or UPDATE A's
