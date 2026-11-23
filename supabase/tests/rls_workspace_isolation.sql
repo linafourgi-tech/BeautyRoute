@@ -57,7 +57,8 @@ BEGIN
 
   INSERT INTO public.profiles (id, full_name) VALUES
     ('00000000-0000-0000-0000-00000000000a', 'RLS Test User A'),
-    ('00000000-0000-0000-0000-00000000000b', 'RLS Test User B');
+    ('00000000-0000-0000-0000-00000000000b', 'RLS Test User B')
+  ON CONFLICT (id) DO NOTHING;
 
   INSERT INTO public.workspaces (id, owner_id, name, slug, display_brand) VALUES
     ('00000000-0000-0000-0000-0000000000aa', '00000000-0000-0000-0000-00000000000a', 'RLS Test Workspace A', 'rls-test-workspace-a', 'RLS Test A'),
