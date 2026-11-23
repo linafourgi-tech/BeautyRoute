@@ -1,11 +1,7 @@
--- DRAFT FOR REVIEW. This is not in the repository. The timestamp in the
--- file name is a placeholder; the final one is set when the file is
--- authorized.
---
 -- Records the production signup trigger auth.users.on_auth_user_created in
 -- the migration history, so that a database built from migrations (local
 -- and CI) creates the public.profiles row at signup, as production does.
--- Background: PHASE5-DECISION-RECORD-v1 (sha256 e452454d...), decision 3.
+-- The existing production trigger is preserved unchanged.
 --
 -- Why it's missing: the baseline 20260722092124 came from `supabase db
 -- dump`, which captures the public schema only. That dump includes the
@@ -30,19 +26,18 @@
 -- The file contains no DROP, no CREATE OR REPLACE, and no ALTER of an
 -- existing trigger.
 --
--- Expected definition (production pre-check 2026-11-20, part-b-v3.out):
+-- Expected definition (read-only production catalog check, 2026-11-20):
 --   CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users
 --     FOR EACH ROW EXECUTE FUNCTION public.handle_new_user()    -- enabled 'O'
 --
 -- The function body itself isn't compared here. Production's text differs
--- from the repository only in line endings (decision 1). The body is pinned
--- by the privileged-writer inventory (C2) and by the production
--- accepted-differences register (PAD-1, addendum A, draft).
+-- from the repository only in line endings (CRLF); that difference was
+-- reviewed and accepted separately.
 --
 -- On production, where the trigger already exists with the expected
 -- definition, the only effect is the NOTICE plus the migration-history row
 -- that the CLI records. Deploying this file to production needs separate
--- authorization (see the Stage 2 plan, section H).
+-- authorization.
 --
 -- search_path and lock_timeout are changed transaction-locally, and
 -- restored before the block ends on every success path. On an error the

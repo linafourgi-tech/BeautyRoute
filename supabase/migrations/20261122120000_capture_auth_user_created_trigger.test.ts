@@ -1,9 +1,9 @@
-// DRAFT FOR REVIEW. Not in the repository, and not executed.
 // Structural CI coverage for the signup-trigger parity migration, in the
 // same style as the other *.test.ts files in supabase/migrations.
-// The real behaviour (absent / expected / differing) is proven against local
-// Postgres by the Stage 2 rehearsal (rehearsal/run-trigger-cases.sh) and,
-// once PR 1 lands, by the inventory check.
+// The migration's behaviour (trigger absent / matching / differing) was
+// verified against a local Postgres in a rehearsal where every case was
+// rolled back. This file guards the migration's shape, and that no later
+// migration drops, replaces or alters the trigger.
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
